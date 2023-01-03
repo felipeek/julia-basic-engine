@@ -1,3 +1,5 @@
+const MENU_TITLE = "Menu (Press ESC to Show/Hide menu, W/A/S/D to move)"
+
 function UiInit(window::GLFW.Window)
 	# setup Dear ImGui context
 	ctx = CImGui.CreateContext()
@@ -16,7 +18,7 @@ function UiInit(window::GLFW.Window)
 end
 
 function DrawMainWindow()
-	if !CImGui.Begin("Menu")
+	if !CImGui.Begin(MENU_TITLE)
 		# Early out if the window is collapsed, as an optimization.
 		CImGui.End()
 		return

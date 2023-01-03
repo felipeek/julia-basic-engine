@@ -1,4 +1,6 @@
 mutable struct CoreCtx
+	graphicsCtx::GraphicsCtx
+
 	camera::PerspectiveCamera
 	lights::Vector{Light}
 	e::Entity
@@ -12,7 +14,7 @@ mutable struct CoreCtx
 end
 
 function CreateCamera(windowWidth::Integer, windowHeight::Integer)::PerspectiveCamera
-	cameraPosition = Vec3(0.0, 0.0, 5.0)
+	cameraPosition = Vec3(0.0, 0.0, 4.0)
 	cameraNearPlane = -0.01
 	cameraFarPlane = -1000.0
 	cameraFov = 45.0
@@ -33,18 +35,21 @@ function CreateLights()::Vector{Light}
 end
 
 function CreateEntity()::Entity
-	mesh = GraphicsMeshCreateFromObj("./res/bunny.obj")
-	return GraphicsEntityCreate(mesh, Vec3(0.0, 0.0, 0.0), QuaternionNew(Vec3(0.0, 1.0, 0.0), 0.0), Vec3(1.0, 1.0, 1.0), Vec4(1.0, 0.0, 0.0, 1.0))
+	mesh = GraphicsMeshCreateFromObj("./res/spot.obj")
+	return GraphicsEntityCreate(mesh, Vec3(0.0, 0.0, 0.0), QuaternionNew(Vec3(0.0, 1.0, 0.0), 135.0), Vec3(1.0, 1.0, 1.0),
+		Vec4(113 / 255, 199 / 255, 236 / 255, 1))
 end
 
 function CoreInit(windowWidth::Integer, windowHeight::Integer)::CoreCtx
+	graphicsCtx = GraphicsInit()
+
 	camera = CreateCamera(windowWidth, windowHeight)
 	lights = CreateLights()
 	e = CreateEntity()
 	wireframe = false
 	keyState = DefaultDict{GLFW.Key, Bool}(false)
 
-	return CoreCtx(camera, lights, e, wireframe, 0, 0, windowWidth, windowHeight, keyState)
+	return CoreCtx(graphicsCtx, camera, lights, e, wireframe, 0, 0, windowWidth, windowHeight, keyState)
 end
 
 function CoreDestroy(ctx::CoreCtx)
@@ -54,7 +59,7 @@ function CoreUpdate(ctx::CoreCtx, deltaTime::Real)
 end
 
 function CoreRender(ctx::CoreCtx)
-	GraphicsEntityRenderPhongShader(ctx.camera, ctx.e, ctx.lights)
+	GraphicsEntityRenderPhongShader(ctx.graphicsCtx, ctx.camera, ctx.e, ctx.lights)
 end
 
 function CoreInputProcess(ctx::CoreCtx, deltaTime::Real)

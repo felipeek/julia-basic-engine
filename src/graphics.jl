@@ -35,6 +35,18 @@ mutable struct Light
 	specularColor::Vec4
 end
 
+mutable struct GraphicsCtx
+	phongShader::Shader
+	basicShader::Shader
+end
+
+function GraphicsInit()::GraphicsCtx
+	phongShader = GraphicsShaderCreate(PHONG_VERTEX_SHADER_PATH, PHONG_FRAGMENT_SHADER_PATH)
+	basicShader = GraphicsShaderCreate(BASIC_VERTEX_SHADER_PATH, BASIC_FRAGMENT_SHADER_PATH)
+
+	return GraphicsCtx(phongShader, basicShader)
+end
+
 function GraphicsShaderCreate(vertexShaderPath::String, fragmentShaderPath::String)::Shader
 	vertexShaderCode = [ read(vertexShaderPath, String) ]
 	fragmentShaderCode = [ read(fragmentShaderPath, String) ]
@@ -76,53 +88,6 @@ function GraphicsShaderCreate(vertexShaderPath::String, fragmentShaderPath::Stri
 	end
 
 	return shaderProgram
-end
-
-mutable struct PredefinedShaders
-	phongShader::Shader
-	basicShader::Shader
-	initialized::Bool
-end
-
-predefinedShaders = PredefinedShaders(0, 0, false)
-
-function InitPredefinedShaders()
-	if !predefinedShaders.initialized
-		predefinedShaders.phongShader = GraphicsShaderCreate(PHONG_VERTEX_SHADER_PATH, PHONG_FRAGMENT_SHADER_PATH)
-		predefinedShaders.basicShader = GraphicsShaderCreate(BASIC_VERTEX_SHADER_PATH, BASIC_FRAGMENT_SHADER_PATH)
-		predefinedShaders.initialized = true
-	end
-end
-
-function GraphicsQuadCreate()::Mesh
-	size = 0.5
-	vertices = Vector{Vertex}()
-	triangles = Vector{DVec3f}()
-
-	position = Vec3(0.0, 0.0, 0.0)
-	normal = Vec3(0.0, 0.0, 1.0)
-	textureCoords = Vec2(0.0, 0.0)
-	push!(vertices, Vertex(position, normal, textureCoords))
-
-	position = Vec3(size, 0.0, 0.0)
-	normal = Vec3(0.0, 0.0, 1.0)
-	textureCoords = Vec2(1.0, 0.0)
-	push!(vertices, Vertex(position, normal, textureCoords))
-
-	position = Vec3(0.0, size, 0.0)
-	normal = Vec3(0.0, 0.0, 1.0)
-	textureCoords = Vec2(0.0, 1.0)
-	push!(vertices, Vertex(position, normal, textureCoords))
-
-	position = Vec3(size, size, 0.0)
-	normal = Vec3(0.0, 0.0, 1.0)
-	textureCoords = Vec2(1.0, 1.0)
-	push!(vertices, Vertex(position, normal, textureCoords))
-
-	push!(triangles, DVec3f(0, 1, 2))
-	push!(triangles, DVec3f(1, 3, 2))
-
-	return GraphicsMeshCreate(vertices, triangles)
 end
 
 function GraphicsMeshCreate(vertices::Vector{Vertex}, triangles::Vector{DVec3f})::Mesh
@@ -223,9 +188,8 @@ function EntityRecalculateModelMatrix(entity::Entity)
 	entity.modelMatrix = translationMatrix * entity.modelMatrix
 end
 
-function GraphicsEntityRenderBasicShader(camera::PerspectiveCamera, entity::Entity)
-	InitPredefinedShaders()
-	shader = predefinedShaders.basicShader
+function GraphicsEntityRenderBasicShader(ctx::GraphicsCtx, camera::PerspectiveCamera, entity::Entity)
+	shader = ctx.basicShader
 	glUseProgram(shader)
 	modelMatrixLocation = glGetUniformLocation(shader, "model_matrix")
 	viewMatrixLocation = glGetUniformLocation(shader, "view_matrix")
@@ -240,9 +204,8 @@ function GraphicsEntityRenderBasicShader(camera::PerspectiveCamera, entity::Enti
 	glUseProgram(0)
 end
 
-function GraphicsEntityRenderPhongShader(camera::PerspectiveCamera, entity::Entity, lights::Vector{Light})
-	InitPredefinedShaders()
-	shader = predefinedShaders.phongShader
+function GraphicsEntityRenderPhongShader(ctx::GraphicsCtx, camera::PerspectiveCamera, entity::Entity, lights::Vector{Light})
+	shader = ctx.phongShader
 	glUseProgram(shader)
 	LightUpdateUniforms(lights, shader)
 	cameraPositionLocation = glGetUniformLocation(shader, "camera_position")
