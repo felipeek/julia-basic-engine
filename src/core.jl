@@ -3,8 +3,8 @@ mutable struct CoreCtx
 	lights::Vector{Light}
 	e::Entity
 	wireframe::Bool
-	xPosOld::Integer
-	yPosOld::Integer
+	xPosOld::Real
+	yPosOld::Real
 
 	windowWidth::Integer
 	windowHeight::Integer
