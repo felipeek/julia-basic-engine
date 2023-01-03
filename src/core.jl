@@ -115,13 +115,13 @@ function CoreInputProcess(ctx::CoreCtx, deltaTime::Real)
 	end
 
 	if ctx.keyState[GLFW.KEY_L]
-		if wireframe
+		if ctx.wireframe
 			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
 		else
 			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
 		end
 
-		wireframe = !wireframe
+		ctx.wireframe = !ctx.wireframe
 		ctx.keyState[GLFW.KEY_L] = false
 	end
 end
