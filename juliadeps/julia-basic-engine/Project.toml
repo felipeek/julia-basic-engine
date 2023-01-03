@@ -1,0 +1,6 @@
+[deps]
+CImGui = "5d785b6c-b76f-510e-a07c-3070796c7e87"
+DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
+FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
+MeshIO = "7269a6da-0436-5bbc-96c2-40638cbb6118"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
