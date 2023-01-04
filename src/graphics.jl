@@ -5,6 +5,13 @@ const PHONG_FRAGMENT_SHADER_PATH = "./shaders/phong_shader.fs"
 const BASIC_VERTEX_SHADER_PATH = "./shaders/basic_shader.vs"
 const BASIC_FRAGMENT_SHADER_PATH = "./shaders/basic_shader.fs"
 
+struct VertexWithBaryCoords
+	position::Vec3f
+	normal::Vec3f
+	textureCoordinates::Vec2f
+	baryCoords::Vec3f
+end
+
 struct Vertex
 	position::Vec3f
 	normal::Vec3f
@@ -38,6 +45,10 @@ end
 mutable struct GraphicsCtx
 	phongShader::Shader
 	basicShader::Shader
+end
+
+function VertexWithBaryCoords(vertex::Vertex, baryCoords::Vec3f)::VertexWithBaryCoords
+	return VertexWithBaryCoords(vertex.position, vertex.normal, vertex.textureCoordinates, baryCoords)
 end
 
 function GraphicsInit()::GraphicsCtx
@@ -91,12 +102,19 @@ function GraphicsShaderCreate(vertexShaderPath::String, fragmentShaderPath::Stri
 end
 
 function GraphicsMeshCreate(vertices::Vector{Vertex}, triangles::Vector{DVec3f})::Mesh
-	indexes = Vector{UInt32}()
+	verticesWithBaryCoords = Vector{VertexWithBaryCoords}()
+
 	for t in triangles
-		push!(indexes, t[1] - 1)
-		push!(indexes, t[2] - 1)
-		push!(indexes, t[3] - 1)
+		v1 = vertices[t[1]]
+		v2 = vertices[t[2]]
+		v3 = vertices[t[3]]
+
+		push!(verticesWithBaryCoords, VertexWithBaryCoords(v1, Vec3f(1, 0, 0)))
+		push!(verticesWithBaryCoords, VertexWithBaryCoords(v2, Vec3f(0, 1, 0)))
+		push!(verticesWithBaryCoords, VertexWithBaryCoords(v3, Vec3f(0, 0, 1)))
 	end
+
+	indexes = UInt32[i - 1 for i = 1:length(verticesWithBaryCoords)]
 
 	VAORef = Ref{GLuint}(0)
 	VBORef = Ref{GLuint}(0)
@@ -112,17 +130,20 @@ function GraphicsMeshCreate(vertices::Vector{Vertex}, triangles::Vector{DVec3f})
 	glBindVertexArray(VAO)
 
 	glBindBuffer(GL_ARRAY_BUFFER, VBO)
-	glBufferData(GL_ARRAY_BUFFER, length(vertices) * sizeof(Vertex), C_NULL, GL_STATIC_DRAW)
-	glBufferSubData(GL_ARRAY_BUFFER, 0, length(vertices) * sizeof(Vertex), vertices)
+	glBufferData(GL_ARRAY_BUFFER, length(verticesWithBaryCoords) * sizeof(VertexWithBaryCoords), C_NULL, GL_STATIC_DRAW)
+	glBufferSubData(GL_ARRAY_BUFFER, 0, length(verticesWithBaryCoords) * sizeof(VertexWithBaryCoords), verticesWithBaryCoords)
 
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), Ptr{Cvoid}(0 * sizeof(GLfloat)))
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(GLfloat), Ptr{Cvoid}(0 * sizeof(GLfloat)))
 	glEnableVertexAttribArray(0)
 
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), Ptr{Cvoid}(3 * sizeof(GLfloat)))
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(GLfloat), Ptr{Cvoid}(3 * sizeof(GLfloat)))
 	glEnableVertexAttribArray(1)
 
-	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), Ptr{Cvoid}(6 * sizeof(GLfloat)))
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 11 * sizeof(GLfloat), Ptr{Cvoid}(6 * sizeof(GLfloat)))
 	glEnableVertexAttribArray(2)
+
+	glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(GLfloat), Ptr{Cvoid}(8 * sizeof(GLfloat)))
+	glEnableVertexAttribArray(3)
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO)
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, length(indexes) * sizeof(UInt32), C_NULL, GL_STATIC_DRAW)

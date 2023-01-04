@@ -3,6 +3,7 @@
 in vec3 fragment_position;
 in vec3 fragment_normal;
 in vec2 fragment_texture_coords;
+in vec3 fragment_bary_coords;
 
 // Light
 struct Light
@@ -55,9 +56,24 @@ vec3 get_point_color_of_light(Light light)
 	//final_color = vec4(point_color.xyz, 1.0);
 }
 
+bool is_lying_on_border()
+{
+	float THRESHOLD = 0.02;
+
+	return fragment_bary_coords.x < THRESHOLD || fragment_bary_coords.x > 1.0 - THRESHOLD ||
+		fragment_bary_coords.y < THRESHOLD || fragment_bary_coords.y > 1.0 - THRESHOLD ||
+		fragment_bary_coords.z < THRESHOLD || fragment_bary_coords.z > 1.0 - THRESHOLD;
+}
+
 void main()
 {
 	final_color = vec4(0.0, 0.0, 0.0, 1.0);
+
+	if (is_lying_on_border())
+	{
+		final_color = vec4(1.0, 0.0, 0.0, 1.0);
+		return;
+	}
 
 	for (int i = 0; i < light_quantity; ++i)
 	{
