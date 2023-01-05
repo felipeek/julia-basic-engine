@@ -15,7 +15,7 @@ using FileIO
 using MeshIO
 using LinearAlgebra
 using DataStructures
-#using Images
+using Images
 
 const defaultWindowWidth = 1366
 const defaultWindowHeight = 768
@@ -59,7 +59,7 @@ function Start()
 		xPos, yPos = GLFW.GetCursorPos(window)
 		
 		if !isMenuVisible
-			CoreMouseClickProcess(coreCtx, button, action, xPos, yPos)
+			CoreMouseClickProcess(coreCtx, button, action, mods, xPos, yPos)
 		end
 	end
 

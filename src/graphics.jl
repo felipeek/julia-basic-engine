@@ -196,7 +196,7 @@ function GraphicsMeshCreate(vertices::Vector{Vertex}, triangles::Vector{DVec3}):
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0)
 
 	center, radius = GetVerticesCenterAndRadius(vertices)
-	println("center: ", center, " ; radius: ", radius)
+	#println("center: ", center, " ; radius: ", radius)
 
 	return Mesh(VAO, VBO, EBO, vertices, triangles, center, radius)
 end

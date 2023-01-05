@@ -60,8 +60,9 @@ function CreateLights()::Vector{Light}
 end
 
 function CreateEntity()::Entity
-	mesh = GraphicsMeshCreateFromObj("./res/spot.obj")
+	#mesh = GraphicsMeshCreateFromObj("./res/spot.obj")
 	#mesh = GraphicsMeshCreateFromObj("/home/felipeek/Development/masters/meshes/bunny.obj")
+	mesh = GraphicsMeshCreateFromObj("/home/felipeek/Development/masters/meshes/scallop/scallop_half.obj")
 
 	return GraphicsEntityCreate(mesh, Vec3(0.0, 0.0, 0.0), QuaternionNew(Vec3(0.0, 1.0, 0.0), 0.0), Vec3(1.0, 1.0, 1.0),
 		Vec4(0.8, 0.8, 0.8, 1))
@@ -76,7 +77,7 @@ function CoreInit(windowWidth::Integer, windowHeight::Integer)::CoreCtx
 	selectedTriangles = [false for i = 1:length(e.mesh.triangles)]
 	wireframe = false
 	keyState = DefaultDict{GLFW.Key, Bool}(false)
-	cameraMovementState = CameraMovementState(false, false, 0, 0, 0.2, 0.5, 0.001)
+	cameraMovementState = CameraMovementState(false, false, 0, 0, 0.2, 0.1, 0.001)
 	selectionBoxState = SelectionBoxState(false, Vec2(0, 0), Vec2(0, 0))
 
 	return CoreCtx(graphicsCtx, camera, lights, e, selectedTriangles, wireframe, cameraMovementState,
@@ -176,18 +177,22 @@ function CoreMouseChangeProcess(ctx::CoreCtx, reset::Bool, xPos::Real, yPos::Rea
 	ctx.cameraMovementState.mouseChangeYPosOld = yPos
 end
 
-function HandleSelection(ctx::CoreCtx)
+function HandleSelection(ctx::CoreCtx, unselect::Bool)
+	if ctx.selectionBoxState.p1 == ctx.selectionBoxState.p2
+		return
+	end
+
 	selectedTrianglesIdxs = GetTrianglesWithinSelectionBox(ctx.e, ctx.graphicsCtx, ctx.camera, ctx.windowWidth, ctx.windowHeight,
-		ctx.selectionBoxState.p1, ctx.selectionBoxState.p2)
+		ctx.selectionBoxState.p1, ctx.selectionBoxState.p2, 2048)
 
 	for idx in selectedTrianglesIdxs
-		ctx.selectedTriangles[idx] = true
+		ctx.selectedTriangles[idx] = !unselect
 	end
 
 	GraphicsMeshUpdate(ctx.e.mesh, ctx.e.mesh.vertices, ctx.e.mesh.triangles, ctx.selectedTriangles)
 end
 
-function CoreMouseClickProcess(ctx::CoreCtx, button::GLFW.MouseButton, action::GLFW.Action, xPos::Real, yPos::Real)
+function CoreMouseClickProcess(ctx::CoreCtx, button::GLFW.MouseButton, action::GLFW.Action, mods::Integer, xPos::Real, yPos::Real)
 	yPos = ctx.windowHeight - yPos
 
 	if button == GLFW.MOUSE_BUTTON_1 # left click
@@ -203,7 +208,7 @@ function CoreMouseClickProcess(ctx::CoreCtx, button::GLFW.MouseButton, action::G
 			if ctx.selectionBoxState.active
 				ctx.selectionBoxState.active = false
 				ctx.selectionBoxState.p2 = Vec2(xPos / ctx.windowWidth, yPos / ctx.windowHeight)
-				HandleSelection(ctx)
+				HandleSelection(ctx, mods == GLFW.MOD_CONTROL)
 			end
 		end
 	elseif button == GLFW.MOUSE_BUTTON_2 # right click
