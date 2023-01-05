@@ -4,6 +4,16 @@ mutable struct SelectionBoxState
 	p2::Vec2
 end
 
+mutable struct CameraMovementState
+	isRotatingCamera::Bool
+	isPanningCamera::Bool
+	mouseChangeXPosOld::Real
+	mouseChangeYPosOld::Real
+	rotationSpeed::Real
+	zoomSpeed::Real
+	panningSpeed::Real
+end
+
 mutable struct CoreCtx
 	graphicsCtx::GraphicsCtx
 
@@ -11,8 +21,7 @@ mutable struct CoreCtx
 	lights::Vector{Light}
 	e::Entity
 	wireframe::Bool
-	xPosOld::Real
-	yPosOld::Real
+	cameraMovementState::CameraMovementState
 	selectionBoxState::SelectionBoxState
 
 	windowWidth::Integer
@@ -56,9 +65,10 @@ function CoreInit(windowWidth::Integer, windowHeight::Integer)::CoreCtx
 	e = CreateEntity()
 	wireframe = false
 	keyState = DefaultDict{GLFW.Key, Bool}(false)
+	cameraMovementState = CameraMovementState(false, false, 0, 0, 0.2, 0.5, 0.001)
 	selectionBoxState = SelectionBoxState(false, Vec2(0, 0), Vec2(0, 0))
 
-	return CoreCtx(graphicsCtx, camera, lights, e, wireframe, 0, 0, selectionBoxState, windowWidth, windowHeight, keyState)
+	return CoreCtx(graphicsCtx, camera, lights, e, wireframe, cameraMovementState, selectionBoxState, windowWidth, windowHeight, keyState)
 end
 
 function CoreDestroy(ctx::CoreCtx)
@@ -82,55 +92,11 @@ function CoreRender(ctx::CoreCtx)
 end
 
 function CoreInputProcess(ctx::CoreCtx, deltaTime::Real)
-	movementSpeed = 3.0
-	rotationSpeed = 300.0
-
-	if ctx.keyState[GLFW.KEY_LEFT_SHIFT]
-		movementSpeed = 0.5
-	end
-	if ctx.keyState[GLFW.KEY_RIGHT_SHIFT]
-		movementSpeed = 0.1
-	end
-
-	if ctx.keyState[GLFW.KEY_W]
-		CameraMoveForward(ctx.camera, movementSpeed * deltaTime)
-	end
-	if ctx.keyState[GLFW.KEY_S]
-		CameraMoveForward(ctx.camera, -movementSpeed * deltaTime)
-	end
-	if ctx.keyState[GLFW.KEY_A]
-		CameraMoveRight(ctx.camera, -movementSpeed * deltaTime)
-	end
-	if ctx.keyState[GLFW.KEY_D]
-		CameraMoveRight(ctx.camera, movementSpeed * deltaTime)
-	end
-
-	if ctx.keyState[GLFW.KEY_X]
-		if ctx.keyState[GLFW.KEY_LEFT_SHIFT] || ctx.keyState[GLFW.KEY_RIGHT_SHIFT]
-			rotation = QuaternionNew(Vec3(1.0, 0.0, 0.0), rotationSpeed * deltaTime)
-			GraphicsEntitySetRotation(ctx.e, rotation * ctx.e.worldRotation)
-		else
-			rotation = QuaternionNew(Vec3(1.0, 0.0, 0.0), -rotationSpeed * deltaTime)
-			GraphicsEntitySetRotation(ctx.e, rotation * ctx.e.worldRotation)
-		end
-	end
-	if ctx.keyState[GLFW.KEY_Y]
-		if ctx.keyState[GLFW.KEY_LEFT_SHIFT] || ctx.keyState[GLFW.KEY_RIGHT_SHIFT]
-			rotation = QuaternionNew(Vec3(0.0, 1.0, 0.0), rotationSpeed * deltaTime)
-			GraphicsEntitySetRotation(ctx.e, rotation * ctx.e.worldRotation)
-		else
-			rotation = QuaternionNew(Vec3(0.0, 1.0, 0.0), -rotationSpeed * deltaTime)
-			GraphicsEntitySetRotation(ctx.e, rotation * ctx.e.worldRotation)
-		end
-	end
 	if ctx.keyState[GLFW.KEY_Z]
-		if ctx.keyState[GLFW.KEY_LEFT_SHIFT] || ctx.keyState[GLFW.KEY_RIGHT_SHIFT]
-			rotation = QuaternionNew(Vec3(0.0, 0.0, 1.0), rotationSpeed * deltaTime)
-			GraphicsEntitySetRotation(ctx.e, rotation * ctx.e.worldRotation)
-		else
-			rotation = QuaternionNew(Vec3(0.0, 0.0, 1.0), -rotationSpeed * deltaTime)
-			GraphicsEntitySetRotation(ctx.e, rotation * ctx.e.worldRotation)
-		end
+		# TODO: calculate this dynamically
+		LookAtCameraSetLookAtPosition(ctx.camera, Vec3(0.0, 0.0, 0.0))
+		LookAtCameraSetLookAtDistance(ctx.camera, 4.0)
+		ctx.keyState[GLFW.KEY_Z] = false
 	end
 
 	if ctx.keyState[GLFW.KEY_L]
@@ -157,24 +123,39 @@ end
 
 function CoreMouseChangeProcess(ctx::CoreCtx, reset::Bool, xPos::Real, yPos::Real)
 	yPos = ctx.windowHeight - yPos
+
 	if ctx.selectionBoxState.active
 		ctx.selectionBoxState.p2 = Vec2(xPos / ctx.windowWidth, yPos / ctx.windowHeight)
 	end
 
-	## This constant is basically the mouse sensibility.
-	## @TODO: Allow mouse sensibility to be configurable.
-	#cameraMouseSpeed = 0.1
+	if ctx.cameraMovementState.isRotatingCamera
+		if !reset
+			xDiff = xPos - ctx.cameraMovementState.mouseChangeXPosOld
+			yDiff = yPos - ctx.cameraMovementState.mouseChangeYPosOld
 
-	#if !reset
-	#	xDiff = xPos - ctx.xPosOld
-	#	yDiff = yPos - ctx.yPosOld
+			pitch = -ctx.cameraMovementState.rotationSpeed * xDiff
+			yaw = ctx.cameraMovementState.rotationSpeed * yDiff
+			LookAtCameraRotate(ctx.camera, -pitch, -yaw)
+		end
+	end
 
-	#	CameraRotateX(ctx.camera, cameraMouseSpeed * xDiff)
-	#	CameraRotateY(ctx.camera, cameraMouseSpeed * yDiff)
-	#end
+	if ctx.cameraMovementState.isPanningCamera
+		if !reset
+			xDiff = xPos - ctx.cameraMovementState.mouseChangeXPosOld
+			yDiff = yPos - ctx.cameraMovementState.mouseChangeYPosOld
 
-	#ctx.xPosOld = xPos
-	#ctx.yPosOld = yPos
+			yAxis = CameraGetYAxis(ctx.camera)
+			inc = -ctx.cameraMovementState.panningSpeed * LookAtCameraGetLookAtDistance(ctx.camera) * yDiff * yAxis
+			LookAtCameraSetLookAtPosition(ctx.camera, LookAtCameraGetLookAtPosition(ctx.camera) + inc)
+
+			xAxis = CameraGetXAxis(ctx.camera)
+			inc = -ctx.cameraMovementState.panningSpeed * LookAtCameraGetLookAtDistance(ctx.camera) * xDiff * xAxis
+			LookAtCameraSetLookAtPosition(ctx.camera, LookAtCameraGetLookAtPosition(ctx.camera) + inc)
+		end
+	end
+
+	ctx.cameraMovementState.mouseChangeXPosOld = xPos
+	ctx.cameraMovementState.mouseChangeYPosOld = yPos
 end
 
 function CoreMouseClickProcess(ctx::CoreCtx, button::GLFW.MouseButton, action::GLFW.Action, xPos::Real, yPos::Real)
@@ -196,10 +177,28 @@ function CoreMouseClickProcess(ctx::CoreCtx, button::GLFW.MouseButton, action::G
 				# do something
 			end
 		end
+	elseif button == GLFW.MOUSE_BUTTON_2 # right click
+		if action == GLFW.PRESS
+			ctx.cameraMovementState.isRotatingCamera = true
+		end
+
+		if action == GLFW.RELEASE
+			ctx.cameraMovementState.isRotatingCamera = false
+		end
+	elseif button == GLFW.MOUSE_BUTTON_3
+		if action == GLFW.PRESS
+			ctx.cameraMovementState.isPanningCamera = true
+		end
+
+		if action == GLFW.RELEASE
+			ctx.cameraMovementState.isPanningCamera = false
+		end
 	end
 end
 
 function CoreScrollChangeProcess(ctx::CoreCtx, xOffset::Real, yOffset::Real)
+	currentLookAtDistance = LookAtCameraGetLookAtDistance(ctx.camera)
+	LookAtCameraSetLookAtDistance(ctx.camera, currentLookAtDistance - yOffset *	ctx.cameraMovementState.zoomSpeed)
 end
 
 function CoreWindowResizeProcess(ctx::CoreCtx, windowWidth::Integer, windowHeight::Integer)

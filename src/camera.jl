@@ -123,6 +123,12 @@ function CameraGetProjectionMatrix(camera::Camera)::Matrix
 	return camera.projectionMatrix
 end
 
+function CameraGetView(camera::Camera)::Vec3
+	cameraViewMatrix = camera.viewMatrix
+	cameraView = Vec3(-cameraViewMatrix[3, 1], -cameraViewMatrix[3, 2], -cameraViewMatrix[3, 3])
+	return normalize(cameraView);
+end
+
 function CameraForceMatrixRecalculation(camera::Camera, windowWidth::Integer, windowHeight::Integer)
 	RecalculateViewMatrix(camera)
 	RecalculateProjectionMatrix(camera, windowWidth, windowHeight)
@@ -170,12 +176,6 @@ end
 
 # Look At Camera
 
-function CameraGetView(camera::PerspectiveCamera)::Vec3
-	cameraViewMatrix = camera.viewMatrix
-	cameraView = Vec3(-cameraViewMatrix[2, 0], -cameraViewMatrix[2, 1], -cameraViewMatrix[2, 2])
-	return normalize(cameraView);
-end
-
 function LookAtCamera(lookAtPosition::Vec3, lookAtDistance::Real, nearPlane::Real, farPlane::Real, fov::Real,
 		windowWidth::Integer, windowHeight::Integer)::LookAtCamera
 	cameraView = Vec3(0, 0, -1)
@@ -189,16 +189,32 @@ function LookAtCamera(lookAtPosition::Vec3, lookAtDistance::Real, nearPlane::Rea
 end
 
 function LookAtCameraRotate(camera::LookAtCamera, xDifference::Real, yDifference::Real)
-	CameraRotateX(camera.perspectiveCamera, xDifference)
-	CameraRotateY(camera.perspectiveCamera, yDifference)
-	cameraView = CameraGetView(camera.perspectiveCamera)
-	camera.perspectiveCamera.position = camera.lookAtPosition - camera.lookAtDistance * cameraView
-	RecalculateViewMatrix(camera.perspectiveCamera)
+	CameraRotateX(camera, xDifference)
+	CameraRotateY(camera, yDifference)
+	cameraView = CameraGetView(camera)
+	camera.position = camera.lookAtPosition - camera.lookAtDistance * cameraView
+	RecalculateViewMatrix(camera)
 end
 
 function LookAtCameraSetLookAtPosition(camera::LookAtCamera, lookAtPosition::Vec3)
 	camera.lookAtPosition = lookAtPosition
-	cameraView = CameraGetView(camera.perspectiveCamera)
-	camera.perspectiveCamera.position = camera.lookAtDistance * cameraView
-	RecalculateViewMatrix(camera.perspectiveCamera)
+	cameraView = CameraGetView(camera)
+	camera.position = camera.lookAtPosition - camera.lookAtDistance * cameraView
+	RecalculateViewMatrix(camera)
+end
+
+function LookAtCameraSetLookAtDistance(camera::LookAtCamera, lookAtDistance::Real)
+	camera.lookAtDistance = lookAtDistance;
+
+	cameraView = CameraGetView(camera)
+	camera.position = camera.lookAtPosition - camera.lookAtDistance * cameraView
+	RecalculateViewMatrix(camera)
+end
+
+function LookAtCameraGetLookAtDistance(camera::LookAtCamera)
+	return camera.lookAtDistance
+end
+
+function LookAtCameraGetLookAtPosition(camera::LookAtCamera)
+	return camera.lookAtPosition
 end
