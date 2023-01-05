@@ -4,6 +4,7 @@ in vec3 fragment_position;
 in vec3 fragment_normal;
 in vec2 fragment_texture_coords;
 in vec3 fragment_bary_coords;
+in vec4 fragment_selection_color;
 
 // Light
 struct Light
@@ -24,18 +25,18 @@ uniform vec4 diffuse_color;
 
 out vec4 final_color;
 
-vec3 get_point_color_of_light(Light light)
+vec3 get_point_color_of_light(Light light, vec4 fragment_color)
 {
 	vec3 normal = normalize(fragment_normal);
 
 	vec3 fragment_to_point_light_vec = normalize(light.position - fragment_position);
 
 	// Ambient Color
-	vec4 point_ambient_color = light.ambient_color * diffuse_color;
+	vec4 point_ambient_color = light.ambient_color * fragment_color;
 
 	// Diffuse Color
 	float point_diffuse_contribution = max(0, dot(fragment_to_point_light_vec, normal));
-	vec4 point_diffuse_color = point_diffuse_contribution * light.diffuse_color * diffuse_color;
+	vec4 point_diffuse_color = point_diffuse_contribution * light.diffuse_color * fragment_color;
 	
 	// Specular Color
 	vec3 fragment_to_camera_vec = normalize(camera_position - fragment_position);
@@ -77,7 +78,7 @@ void main()
 
 	for (int i = 0; i < light_quantity; ++i)
 	{
-		vec3 point_color = get_point_color_of_light(lights[i]);
+		vec3 point_color = get_point_color_of_light(lights[i], fragment_selection_color);
 		final_color.x += point_color.x;
 		final_color.y += point_color.y;
 		final_color.z += point_color.z;

@@ -78,9 +78,9 @@ function CoreUpdate(ctx::CoreCtx, deltaTime::Real)
 end
 
 function CoreRender(ctx::CoreCtx)
-	#GraphicsEntityRenderPhongShader(ctx.graphicsCtx, ctx.camera, ctx.e, ctx.lights)
+	GraphicsEntityRenderPhongShader(ctx.graphicsCtx, ctx.camera, ctx.e, ctx.lights)
 	#GraphicsEntityRenderBasicShader(ctx.graphicsCtx, ctx.camera, ctx.e)
-	GraphicsEntityRenderSelectionShader(ctx.graphicsCtx, ctx.camera, ctx.e)
+	#GraphicsEntityRenderSelectionShader(ctx.graphicsCtx, ctx.camera, ctx.e)
 
 	if ctx.selectionBoxState.active
 		GraphicsSelectionBoxRender(
@@ -108,6 +108,12 @@ function CoreInputProcess(ctx::CoreCtx, deltaTime::Real)
 
 		ctx.wireframe = !ctx.wireframe
 		ctx.keyState[GLFW.KEY_L] = false
+	end
+
+	if ctx.keyState[GLFW.KEY_M]
+		GraphicsMeshUpdate(ctx.e.mesh, ctx.e.mesh.vertices, ctx.e.mesh.triangles,
+			Bool[i % 2 == 0 ? true : false for i=1:length(ctx.e.mesh.triangles)])
+		ctx.keyState[GLFW.KEY_M] = false
 	end
 end
 

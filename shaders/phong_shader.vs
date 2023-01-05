@@ -5,11 +5,13 @@ layout (location = 1) in vec3 vertex_normal;
 layout (location = 2) in vec2 vertex_texture_coords;
 layout (location = 3) in vec3 vertex_bary_coords;
 layout (location = 4) in vec4 vertex_selection_color;
+layout (location = 5) in vec4 vertex_unique_tri_color;
 
 out vec3 fragment_position;
 out vec3 fragment_normal;
 out vec2 fragment_texture_coords;
 out vec3 fragment_bary_coords;
+out vec4 fragment_selection_color;
 
 uniform mat4 model_matrix;
 uniform mat4 view_matrix;
@@ -21,5 +23,6 @@ void main()
 	fragment_texture_coords = vertex_texture_coords;
 	fragment_position = (model_matrix * vec4(vertex_position, 1.0)).xyz;
 	fragment_bary_coords = vertex_bary_coords;
+	fragment_selection_color = vertex_selection_color;
 	gl_Position = projection_matrix * view_matrix * model_matrix * vec4(vertex_position, 1.0);
 }

@@ -9,12 +9,16 @@ const SELECTION_FRAGMENT_SHADER_PATH = "./shaders/selection_shader.fs"
 const SELECTION_BOX_VERTEX_SHADER_PATH = "./shaders/selection_box_shader.vs"
 const SELECTION_BOX_FRAGMENT_SHADER_PATH = "./shaders/selection_box_shader.fs"
 
+const TRIANGLE_SELECTED_COLOR = Vec4f(0.0, 1.0, 0.0, 1.0)
+const TRIANGLE_NOT_SELECTED_COLOR = Vec4f(1.0, 0.25, 0.2525, 1.0)
+
 struct RenderingVertex
 	position::Vec3f
 	normal::Vec3f
 	textureCoordinates::Vec2f
 	baryCoords::Vec3f
 	selectionColor::Vec4f
+	uniqueTriColor::Vec4f
 end
 
 struct Vertex
@@ -58,8 +62,8 @@ mutable struct GraphicsCtx
 	selectionBoxEBO::UInt32
 end
 
-function RenderingVertex(vertex::Vertex, baryCoords::Vec3f, selectionColor::Vec4f)::RenderingVertex
-	return RenderingVertex(vertex.position, vertex.normal, vertex.textureCoordinates, baryCoords, selectionColor)
+function RenderingVertex(vertex::Vertex, baryCoords::Vec3f, selectionColor::Vec4f, uniqueTriColor::Vec4f)::RenderingVertex
+	return RenderingVertex(vertex.position, vertex.normal, vertex.textureCoordinates, baryCoords, selectionColor, uniqueTriColor)
 end
 
 function GraphicsInit()::GraphicsCtx
@@ -115,7 +119,7 @@ function GraphicsShaderCreate(vertexShaderPath::String, fragmentShaderPath::Stri
 	return shaderProgram
 end
 
-function GraphicsMeshCreate(vertices::Vector{Vertex}, triangles::Vector{DVec3f})::Mesh
+function GenerateMeshData(vertices::Vector{Vertex}, triangles::Vector{DVec3f}, selectedTriangles::Vector{Bool})::Tuple{Vector{RenderingVertex}, Vector{UInt32}}
 	renderingVertices = Vector{RenderingVertex}()
 
 	for i = 1:length(triangles)
@@ -125,14 +129,21 @@ function GraphicsMeshCreate(vertices::Vector{Vertex}, triangles::Vector{DVec3f})
 		v2 = vertices[t[2]]
 		v3 = vertices[t[3]]
 
+		triangleSelectionColor = selectedTriangles[i] ? TRIANGLE_SELECTED_COLOR : TRIANGLE_NOT_SELECTED_COLOR
 		triangleUniqueColor = TriangleIndexToUniqueColor(i)
 
-		push!(renderingVertices, RenderingVertex(v1, Vec3f(1, 0, 0), triangleUniqueColor))
-		push!(renderingVertices, RenderingVertex(v2, Vec3f(0, 1, 0), triangleUniqueColor))
-		push!(renderingVertices, RenderingVertex(v3, Vec3f(0, 0, 1), triangleUniqueColor))
+		push!(renderingVertices, RenderingVertex(v1, Vec3f(1, 0, 0), triangleSelectionColor, triangleUniqueColor))
+		push!(renderingVertices, RenderingVertex(v2, Vec3f(0, 1, 0), triangleSelectionColor, triangleUniqueColor))
+		push!(renderingVertices, RenderingVertex(v3, Vec3f(0, 0, 1), triangleSelectionColor, triangleUniqueColor))
 	end
 
 	indexes = UInt32[i - 1 for i = 1:length(renderingVertices)]
+
+	return renderingVertices, indexes
+end
+
+function GraphicsMeshCreate(vertices::Vector{Vertex}, triangles::Vector{DVec3f})::Mesh
+	renderingVertices, indexes = GenerateMeshData(vertices, triangles, [false for i=1:length(triangles)])
 
 	VAORef = Ref{GLuint}(0)
 	VBORef = Ref{GLuint}(0)
@@ -166,6 +177,9 @@ function GraphicsMeshCreate(vertices::Vector{Vertex}, triangles::Vector{DVec3f})
 	glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(RenderingVertex), Ptr{Cvoid}(11 * sizeof(GLfloat)))
 	glEnableVertexAttribArray(4)
 
+	glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, sizeof(RenderingVertex), Ptr{Cvoid}(15 * sizeof(GLfloat)))
+	glEnableVertexAttribArray(5)
+
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO)
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, length(indexes) * sizeof(UInt32), C_NULL, GL_STATIC_DRAW)
 	glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, length(indexes) * sizeof(UInt32), indexes)
@@ -176,6 +190,27 @@ function GraphicsMeshCreate(vertices::Vector{Vertex}, triangles::Vector{DVec3f})
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0)
 
 	return Mesh(VAO, VBO, EBO, vertices, triangles)
+end
+
+function GraphicsMeshUpdate(mesh::Mesh, vertices::Vector{Vertex}, triangles::Vector{DVec3f}, selectedTriangles::Vector{Bool})
+	renderingVertices, indexes = GenerateMeshData(vertices, triangles, selectedTriangles)
+
+	VAO = mesh.VAO
+	VBO = mesh.VBO
+	EBO = mesh.EBO
+
+	glBindVertexArray(VAO)
+
+	glBindBuffer(GL_ARRAY_BUFFER, VBO)
+	glBufferSubData(GL_ARRAY_BUFFER, 0, length(renderingVertices) * sizeof(RenderingVertex), renderingVertices)
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO)
+	glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, length(indexes) * sizeof(UInt32), indexes)
+
+	glBindVertexArray(0)
+
+	glBindBuffer(GL_ARRAY_BUFFER, 0)
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0)
 end
 
 function SelectionBoxSetup()::Tuple{GLuint, GLuint, GLuint}
