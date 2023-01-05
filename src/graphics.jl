@@ -131,6 +131,8 @@ function GenerateMeshData(vertices::Vector{Vertex}, triangles::Vector{DVec3f}, s
 
 		triangleSelectionColor = selectedTriangles[i] ? TRIANGLE_SELECTED_COLOR : TRIANGLE_NOT_SELECTED_COLOR
 		triangleUniqueColor = TriangleIndexToUniqueColor(i)
+		@assert TriangleUniqueColorToIndex(triangleUniqueColor) == i "Expected index " * string(i) * " but got " *
+			string(TriangleUniqueColorToIndex(triangleUniqueColor)) * " when color was " * string(triangleUniqueColor)
 
 		push!(renderingVertices, RenderingVertex(v1, Vec3f(1, 0, 0), triangleSelectionColor, triangleUniqueColor))
 		push!(renderingVertices, RenderingVertex(v2, Vec3f(0, 1, 0), triangleSelectionColor, triangleUniqueColor))

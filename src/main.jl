@@ -15,6 +15,7 @@ using FileIO
 using MeshIO
 using LinearAlgebra
 using DataStructures
+#using Images
 
 const defaultWindowWidth = 1366
 const defaultWindowHeight = 768
@@ -22,8 +23,8 @@ const defaultWindowHeight = 768
 include("vectors.jl")
 include("quaternion.jl")
 include("camera.jl")
-include("selection.jl")
 include("graphics.jl")
+include("selection.jl")
 include("ui.jl")
 include("core.jl")
 include("util.jl")

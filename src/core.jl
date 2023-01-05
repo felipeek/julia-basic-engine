@@ -20,6 +20,7 @@ mutable struct CoreCtx
 	camera::LookAtCamera
 	lights::Vector{Light}
 	e::Entity
+	selectedTriangles::Vector{Bool}
 	wireframe::Bool
 	cameraMovementState::CameraMovementState
 	selectionBoxState::SelectionBoxState
@@ -48,6 +49,13 @@ function CreateLights()::Vector{Light}
 	light = Light(lightPosition, ambientColor, diffuseColor, specularColor)
 	push!(lights, light)
 
+	lightPosition = Vec3(0.0, 0.0, -15.0)
+	ambientColor = Vec4(0.1, 0.1, 0.1, 1.0)
+	diffuseColor = Vec4(0.8, 0.8, 0.8, 1.0)
+	specularColor = Vec4(0.5, 0.5, 0.5, 1.0)
+	light = Light(lightPosition, ambientColor, diffuseColor, specularColor)
+	push!(lights, light)
+
 	return lights
 end
 
@@ -63,12 +71,14 @@ function CoreInit(windowWidth::Integer, windowHeight::Integer)::CoreCtx
 	camera = CreateCamera(windowWidth, windowHeight)
 	lights = CreateLights()
 	e = CreateEntity()
+	selectedTriangles = [false for i = 1:length(e.mesh.triangles)]
 	wireframe = false
 	keyState = DefaultDict{GLFW.Key, Bool}(false)
 	cameraMovementState = CameraMovementState(false, false, 0, 0, 0.2, 0.5, 0.001)
 	selectionBoxState = SelectionBoxState(false, Vec2(0, 0), Vec2(0, 0))
 
-	return CoreCtx(graphicsCtx, camera, lights, e, wireframe, cameraMovementState, selectionBoxState, windowWidth, windowHeight, keyState)
+	return CoreCtx(graphicsCtx, camera, lights, e, selectedTriangles, wireframe, cameraMovementState,
+		selectionBoxState, windowWidth, windowHeight, keyState)
 end
 
 function CoreDestroy(ctx::CoreCtx)
@@ -164,6 +174,17 @@ function CoreMouseChangeProcess(ctx::CoreCtx, reset::Bool, xPos::Real, yPos::Rea
 	ctx.cameraMovementState.mouseChangeYPosOld = yPos
 end
 
+function HandleSelection(ctx::CoreCtx)
+	selectedTrianglesIdxs = GetTrianglesWithinSelectionBox(ctx.e, ctx.graphicsCtx, ctx.camera, ctx.windowWidth, ctx.windowHeight,
+		ctx.selectionBoxState.p1, ctx.selectionBoxState.p2)
+
+	for idx in selectedTrianglesIdxs
+		ctx.selectedTriangles[idx] = true
+	end
+
+	GraphicsMeshUpdate(ctx.e.mesh, ctx.e.mesh.vertices, ctx.e.mesh.triangles, ctx.selectedTriangles)
+end
+
 function CoreMouseClickProcess(ctx::CoreCtx, button::GLFW.MouseButton, action::GLFW.Action, xPos::Real, yPos::Real)
 	yPos = ctx.windowHeight - yPos
 
@@ -180,7 +201,7 @@ function CoreMouseClickProcess(ctx::CoreCtx, button::GLFW.MouseButton, action::G
 			if ctx.selectionBoxState.active
 				ctx.selectionBoxState.active = false
 				ctx.selectionBoxState.p2 = Vec2(xPos / ctx.windowWidth, yPos / ctx.windowHeight)
-				# do something
+				HandleSelection(ctx)
 			end
 		end
 	elseif button == GLFW.MOUSE_BUTTON_2 # right click
