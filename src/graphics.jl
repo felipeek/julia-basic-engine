@@ -9,8 +9,8 @@ const SELECTION_FRAGMENT_SHADER_PATH = "./shaders/selection_shader.fs"
 const SELECTION_BOX_VERTEX_SHADER_PATH = "./shaders/selection_box_shader.vs"
 const SELECTION_BOX_FRAGMENT_SHADER_PATH = "./shaders/selection_box_shader.fs"
 
-const TRIANGLE_SELECTED_COLOR = Vec4f(0.0, 1.0, 0.0, 1.0)
-const TRIANGLE_NOT_SELECTED_COLOR = Vec4f(1.0, 0.25, 0.2525, 1.0)
+const TRIANGLE_SELECTED_COLOR = Vec4(0.0, 1.0, 0.0, 1.0)
+const TRIANGLE_NOT_SELECTED_COLOR = Vec4(1.0, 0.25, 0.2525, 1.0)
 
 struct RenderingVertex
 	position::Vec3f
@@ -22,9 +22,9 @@ struct RenderingVertex
 end
 
 struct Vertex
-	position::Vec3f
-	normal::Vec3f
-	textureCoordinates::Vec2f
+	position::Vec3
+	normal::Vec3
+	textureCoordinates::Vec2
 end
 
 struct Mesh
@@ -32,7 +32,10 @@ struct Mesh
 	VBO::UInt32
 	EBO::UInt32
 	vertices::Vector{Vertex}
-	triangles::Vector{DVec3f}
+	triangles::Vector{DVec3}
+
+	center::Vec3
+	radius::Real
 end
 
 mutable struct Entity
@@ -62,8 +65,9 @@ mutable struct GraphicsCtx
 	selectionBoxEBO::UInt32
 end
 
-function RenderingVertex(vertex::Vertex, baryCoords::Vec3f, selectionColor::Vec4f, uniqueTriColor::Vec4f)::RenderingVertex
-	return RenderingVertex(vertex.position, vertex.normal, vertex.textureCoordinates, baryCoords, selectionColor, uniqueTriColor)
+function RenderingVertex(vertex::Vertex, baryCoords::Vec3, selectionColor::Vec4, uniqueTriColor::Vec4f)::RenderingVertex
+	return RenderingVertex(Vec3f(vertex.position), Vec3f(vertex.normal), Vec2f(vertex.textureCoordinates),
+		Vec3f(baryCoords), Vec4f(selectionColor), Vec4f(uniqueTriColor))
 end
 
 function GraphicsInit()::GraphicsCtx
@@ -119,7 +123,7 @@ function GraphicsShaderCreate(vertexShaderPath::String, fragmentShaderPath::Stri
 	return shaderProgram
 end
 
-function GenerateMeshData(vertices::Vector{Vertex}, triangles::Vector{DVec3f}, selectedTriangles::Vector{Bool})::Tuple{Vector{RenderingVertex}, Vector{UInt32}}
+function GenerateMeshData(vertices::Vector{Vertex}, triangles::Vector{DVec3}, selectedTriangles::Vector{Bool})::Tuple{Vector{RenderingVertex}, Vector{UInt32}}
 	renderingVertices = Vector{RenderingVertex}()
 
 	for i = 1:length(triangles)
@@ -134,9 +138,9 @@ function GenerateMeshData(vertices::Vector{Vertex}, triangles::Vector{DVec3f}, s
 		@assert TriangleUniqueColorToIndex(triangleUniqueColor) == i "Expected index " * string(i) * " but got " *
 			string(TriangleUniqueColorToIndex(triangleUniqueColor)) * " when color was " * string(triangleUniqueColor)
 
-		push!(renderingVertices, RenderingVertex(v1, Vec3f(1, 0, 0), triangleSelectionColor, triangleUniqueColor))
-		push!(renderingVertices, RenderingVertex(v2, Vec3f(0, 1, 0), triangleSelectionColor, triangleUniqueColor))
-		push!(renderingVertices, RenderingVertex(v3, Vec3f(0, 0, 1), triangleSelectionColor, triangleUniqueColor))
+		push!(renderingVertices, RenderingVertex(v1, Vec3(1, 0, 0), triangleSelectionColor, triangleUniqueColor))
+		push!(renderingVertices, RenderingVertex(v2, Vec3(0, 1, 0), triangleSelectionColor, triangleUniqueColor))
+		push!(renderingVertices, RenderingVertex(v3, Vec3(0, 0, 1), triangleSelectionColor, triangleUniqueColor))
 	end
 
 	indexes = UInt32[i - 1 for i = 1:length(renderingVertices)]
@@ -144,7 +148,7 @@ function GenerateMeshData(vertices::Vector{Vertex}, triangles::Vector{DVec3f}, s
 	return renderingVertices, indexes
 end
 
-function GraphicsMeshCreate(vertices::Vector{Vertex}, triangles::Vector{DVec3f})::Mesh
+function GraphicsMeshCreate(vertices::Vector{Vertex}, triangles::Vector{DVec3})::Mesh
 	renderingVertices, indexes = GenerateMeshData(vertices, triangles, [false for i=1:length(triangles)])
 
 	VAORef = Ref{GLuint}(0)
@@ -191,10 +195,32 @@ function GraphicsMeshCreate(vertices::Vector{Vertex}, triangles::Vector{DVec3f})
 	glBindBuffer(GL_ARRAY_BUFFER, 0)
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0)
 
-	return Mesh(VAO, VBO, EBO, vertices, triangles)
+	center, radius = GetVerticesCenterAndRadius(vertices)
+	println("center: ", center, " ; radius: ", radius)
+
+	return Mesh(VAO, VBO, EBO, vertices, triangles, center, radius)
 end
 
-function GraphicsMeshUpdate(mesh::Mesh, vertices::Vector{Vertex}, triangles::Vector{DVec3f}, selectedTriangles::Vector{Bool})
+function GetVerticesCenterAndRadius(vertices::Vector{Vertex})::Tuple{Vec3, <:Real}
+	sum = Vec3(0, 0, 0)
+	for v in vertices
+		pos = v.position
+		sum += pos
+	end
+	center = sum / length(vertices)
+	radius = 0
+	for v in vertices
+		pos = v.position
+		dist = norm(pos - center)
+		if dist > radius
+			radius = dist
+		end
+	end
+
+	return center, radius
+end
+
+function GraphicsMeshUpdate(mesh::Mesh, vertices::Vector{Vertex}, triangles::Vector{DVec3}, selectedTriangles::Vector{Bool})
 	renderingVertices, indexes = GenerateMeshData(vertices, triangles, selectedTriangles)
 
 	VAO = mesh.VAO
@@ -300,6 +326,23 @@ function GraphicsEntitySetScale(entity::Entity, worldScale::Vec3)
 end
 
 function EntityRecalculateModelMatrix(entity::Entity)
+
+	# The auto* matrices are used to make sure the scale/translation of the mesh is adjusted with regards to its local coords
+	autoTranslationMatrix = [
+		1 0 0 -entity.mesh.center.x
+		0 1 0 -entity.mesh.center.y
+		0 0 1 -entity.mesh.center.z
+		0 0 0 1
+	]
+
+	radiusInv = 1 / entity.mesh.radius
+	autoScaleMatrix = [
+		radiusInv 0 0 0
+		0 radiusInv 0 0
+		0 0 radiusInv 0
+		0 0 0 1
+	]
+
 	scaleMatrix = [
 		entity.worldScale[1] 0 0 0
 		0 entity.worldScale[2] 0 0
@@ -316,8 +359,7 @@ function EntityRecalculateModelMatrix(entity::Entity)
 		0 0 0 1
 	]
 
-	entity.modelMatrix = rotationMatrix * scaleMatrix
-	entity.modelMatrix = translationMatrix * entity.modelMatrix
+	entity.modelMatrix = rotationMatrix * scaleMatrix * translationMatrix * autoScaleMatrix * autoTranslationMatrix
 end
 
 function GraphicsEntityRenderBasicShader(ctx::GraphicsCtx, camera::Camera, entity::Entity)
@@ -422,7 +464,7 @@ function GraphicsMeshCreateFromObj(objPath::String)::Mesh
 	end
 	
 	vertices = Vector{Vertex}()
-	triangles = Vector{DVec3f}()
+	triangles = Vector{DVec3}()
 	mustGenerateNormals = !hasproperty(rawMesh, :normals)
 	local generatedNormals
 	hasUv = hasproperty(rawMesh, :uv)
@@ -431,21 +473,21 @@ function GraphicsMeshCreateFromObj(objPath::String)::Mesh
 		i1 = vertexToIdx[triangle[1]]
 		i2 = vertexToIdx[triangle[2]]
 		i3 = vertexToIdx[triangle[3]]
-		push!(triangles, DVec3f(i1, i2, i3))
+		push!(triangles, DVec3(i1, i2, i3))
 	end
 
 	if mustGenerateNormals
 		println("Object " * objPath * " does not have normals. Normals will be generated.")
-		generatedNormals = fill(Vec3f(0, 0, 0), length(rawMesh.position))
+		generatedNormals = fill(Vec3(0, 0, 0), length(rawMesh.position))
 
 		for t in triangles
 			i1 = t[1]
 			i2 = t[2]
 			i3 = t[3]
 
-			p1 = Vec3f(rawMesh.position[i1])
-			p2 = Vec3f(rawMesh.position[i2])
-			p3 = Vec3f(rawMesh.position[i3])
+			p1 = Vec3(rawMesh.position[i1])
+			p2 = Vec3(rawMesh.position[i2])
+			p3 = Vec3(rawMesh.position[i3])
 
 			e1 = p2 - p1
 			e2 = p3 - p1
@@ -459,9 +501,9 @@ function GraphicsMeshCreateFromObj(objPath::String)::Mesh
 	end
 
 	for i = 1:length(rawMesh.position)
-		position = Vec3f(rawMesh.position[i])
-		normal = !mustGenerateNormals ? Vec3f(rawMesh.normals[i]) : generatedNormals[i]
-		uv = hasUv ? Vec2f(rawMesh.uv[i]) : Vec2f(0, 0)
+		position = Vec3(rawMesh.position[i])
+		normal = !mustGenerateNormals ? Vec3(rawMesh.normals[i]) : generatedNormals[i]
+		uv = hasUv ? Vec2(rawMesh.uv[i]) : Vec2(0, 0)
 		push!(vertices, Vertex(position, normal, uv))
 	end
 

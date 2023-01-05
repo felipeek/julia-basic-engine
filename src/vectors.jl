@@ -15,3 +15,5 @@ const Vec3f = SVector{3, Float32}
 const Vec2f = SVector{2, Float32}
 const DVec3f = SVector{3, Int32}
 const DVec2f = SVector{2, Int32}
+
+Vec3f(v::Vec3) = Vec3f(Float32(v[1]), Float32(v[2]), Float32(v[3]))

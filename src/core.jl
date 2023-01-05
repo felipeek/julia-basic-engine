@@ -61,7 +61,9 @@ end
 
 function CreateEntity()::Entity
 	mesh = GraphicsMeshCreateFromObj("./res/spot.obj")
-	return GraphicsEntityCreate(mesh, Vec3(0.0, 0.0, 0.0), QuaternionNew(Vec3(0.0, 1.0, 0.0), 135.0), Vec3(1.0, 1.0, 1.0),
+	#mesh = GraphicsMeshCreateFromObj("/home/felipeek/Development/masters/meshes/bunny.obj")
+
+	return GraphicsEntityCreate(mesh, Vec3(0.0, 0.0, 0.0), QuaternionNew(Vec3(0.0, 1.0, 0.0), 0.0), Vec3(1.0, 1.0, 1.0),
 		Vec4(0.8, 0.8, 0.8, 1))
 end
 
