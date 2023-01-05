@@ -7,7 +7,7 @@ end
 mutable struct CoreCtx
 	graphicsCtx::GraphicsCtx
 
-	camera::PerspectiveCamera
+	camera::LookAtCamera
 	lights::Vector{Light}
 	e::Entity
 	wireframe::Bool
@@ -20,12 +20,13 @@ mutable struct CoreCtx
 	keyState::AbstractDict{GLFW.Key, Bool}
 end
 
-function CreateCamera(windowWidth::Integer, windowHeight::Integer)::PerspectiveCamera
-	cameraPosition = Vec3(0.0, 0.0, 4.0)
+function CreateCamera(windowWidth::Integer, windowHeight::Integer)::LookAtCamera
+	lookAtPosition = Vec3(0.0, 0.0, 0.0)
+	lookAtDistance = 4.0
 	cameraNearPlane = -0.01
 	cameraFarPlane = -1000.0
 	cameraFov = 45.0
-	return PerspectiveCamera(cameraPosition, cameraNearPlane, cameraFarPlane, cameraFov, windowWidth, windowHeight)
+	return LookAtCamera(lookAtPosition, lookAtDistance, cameraNearPlane, cameraFarPlane, cameraFov, windowWidth, windowHeight)
 end
 
 function CreateLights()::Vector{Light}
