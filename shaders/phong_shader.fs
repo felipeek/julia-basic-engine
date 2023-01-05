@@ -67,13 +67,13 @@ bool is_lying_on_border()
 
 void main()
 {
-	final_color = vec4(0.0, 0.0, 0.0, 1.0);
-
 	if (is_lying_on_border())
 	{
-		final_color = vec4(1.0, 0.0, 0.0, 1.0);
+		final_color = vec4(0.1, 0.1, 0.1, 1.0);
 		return;
 	}
+
+	final_color = vec4(0.0, 0.0, 0.0, 1.0);
 
 	for (int i = 0; i < light_quantity; ++i)
 	{

@@ -4,12 +4,17 @@ const PHONG_VERTEX_SHADER_PATH = "./shaders/phong_shader.vs"
 const PHONG_FRAGMENT_SHADER_PATH = "./shaders/phong_shader.fs"
 const BASIC_VERTEX_SHADER_PATH = "./shaders/basic_shader.vs"
 const BASIC_FRAGMENT_SHADER_PATH = "./shaders/basic_shader.fs"
+const SELECTION_VERTEX_SHADER_PATH = "./shaders/selection_shader.vs"
+const SELECTION_FRAGMENT_SHADER_PATH = "./shaders/selection_shader.fs"
+const SELECTION_BOX_VERTEX_SHADER_PATH = "./shaders/selection_box_shader.vs"
+const SELECTION_BOX_FRAGMENT_SHADER_PATH = "./shaders/selection_box_shader.fs"
 
-struct VertexWithBaryCoords
+struct RenderingVertex
 	position::Vec3f
 	normal::Vec3f
 	textureCoordinates::Vec2f
 	baryCoords::Vec3f
+	selectionColor::Vec4f
 end
 
 struct Vertex
@@ -45,17 +50,26 @@ end
 mutable struct GraphicsCtx
 	phongShader::Shader
 	basicShader::Shader
+	selectionShader::Shader
+	selectionBoxShader::Shader
+
+	selectionBoxVAO::UInt32
+	selectionBoxVBO::UInt32
+	selectionBoxEBO::UInt32
 end
 
-function VertexWithBaryCoords(vertex::Vertex, baryCoords::Vec3f)::VertexWithBaryCoords
-	return VertexWithBaryCoords(vertex.position, vertex.normal, vertex.textureCoordinates, baryCoords)
+function RenderingVertex(vertex::Vertex, baryCoords::Vec3f, selectionColor::Vec4f)::RenderingVertex
+	return RenderingVertex(vertex.position, vertex.normal, vertex.textureCoordinates, baryCoords, selectionColor)
 end
 
 function GraphicsInit()::GraphicsCtx
 	phongShader = GraphicsShaderCreate(PHONG_VERTEX_SHADER_PATH, PHONG_FRAGMENT_SHADER_PATH)
 	basicShader = GraphicsShaderCreate(BASIC_VERTEX_SHADER_PATH, BASIC_FRAGMENT_SHADER_PATH)
+	selectionShader = GraphicsShaderCreate(SELECTION_VERTEX_SHADER_PATH, SELECTION_FRAGMENT_SHADER_PATH)
+	selectionBoxShader = GraphicsShaderCreate(SELECTION_BOX_VERTEX_SHADER_PATH, SELECTION_BOX_FRAGMENT_SHADER_PATH)
+	selectionBoxVAO, selectionBoxVBO, selectionBoxEBO = SelectionBoxSetup()
 
-	return GraphicsCtx(phongShader, basicShader)
+	return GraphicsCtx(phongShader, basicShader, selectionShader, selectionBoxShader, selectionBoxVAO, selectionBoxVBO, selectionBoxEBO)
 end
 
 function GraphicsShaderCreate(vertexShaderPath::String, fragmentShaderPath::String)::Shader
@@ -102,19 +116,23 @@ function GraphicsShaderCreate(vertexShaderPath::String, fragmentShaderPath::Stri
 end
 
 function GraphicsMeshCreate(vertices::Vector{Vertex}, triangles::Vector{DVec3f})::Mesh
-	verticesWithBaryCoords = Vector{VertexWithBaryCoords}()
+	renderingVertices = Vector{RenderingVertex}()
 
-	for t in triangles
+	for i = 1:length(triangles)
+		t = triangles[i]
+
 		v1 = vertices[t[1]]
 		v2 = vertices[t[2]]
 		v3 = vertices[t[3]]
 
-		push!(verticesWithBaryCoords, VertexWithBaryCoords(v1, Vec3f(1, 0, 0)))
-		push!(verticesWithBaryCoords, VertexWithBaryCoords(v2, Vec3f(0, 1, 0)))
-		push!(verticesWithBaryCoords, VertexWithBaryCoords(v3, Vec3f(0, 0, 1)))
+		triangleUniqueColor = TriangleIndexToUniqueColor(i)
+
+		push!(renderingVertices, RenderingVertex(v1, Vec3f(1, 0, 0), triangleUniqueColor))
+		push!(renderingVertices, RenderingVertex(v2, Vec3f(0, 1, 0), triangleUniqueColor))
+		push!(renderingVertices, RenderingVertex(v3, Vec3f(0, 0, 1), triangleUniqueColor))
 	end
 
-	indexes = UInt32[i - 1 for i = 1:length(verticesWithBaryCoords)]
+	indexes = UInt32[i - 1 for i = 1:length(renderingVertices)]
 
 	VAORef = Ref{GLuint}(0)
 	VBORef = Ref{GLuint}(0)
@@ -130,20 +148,23 @@ function GraphicsMeshCreate(vertices::Vector{Vertex}, triangles::Vector{DVec3f})
 	glBindVertexArray(VAO)
 
 	glBindBuffer(GL_ARRAY_BUFFER, VBO)
-	glBufferData(GL_ARRAY_BUFFER, length(verticesWithBaryCoords) * sizeof(VertexWithBaryCoords), C_NULL, GL_STATIC_DRAW)
-	glBufferSubData(GL_ARRAY_BUFFER, 0, length(verticesWithBaryCoords) * sizeof(VertexWithBaryCoords), verticesWithBaryCoords)
+	glBufferData(GL_ARRAY_BUFFER, length(renderingVertices) * sizeof(RenderingVertex), C_NULL, GL_STATIC_DRAW)
+	glBufferSubData(GL_ARRAY_BUFFER, 0, length(renderingVertices) * sizeof(RenderingVertex), renderingVertices)
 
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(GLfloat), Ptr{Cvoid}(0 * sizeof(GLfloat)))
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(RenderingVertex), Ptr{Cvoid}(0 * sizeof(GLfloat)))
 	glEnableVertexAttribArray(0)
 
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(GLfloat), Ptr{Cvoid}(3 * sizeof(GLfloat)))
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(RenderingVertex), Ptr{Cvoid}(3 * sizeof(GLfloat)))
 	glEnableVertexAttribArray(1)
 
-	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 11 * sizeof(GLfloat), Ptr{Cvoid}(6 * sizeof(GLfloat)))
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(RenderingVertex), Ptr{Cvoid}(6 * sizeof(GLfloat)))
 	glEnableVertexAttribArray(2)
 
-	glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(GLfloat), Ptr{Cvoid}(8 * sizeof(GLfloat)))
+	glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(RenderingVertex), Ptr{Cvoid}(8 * sizeof(GLfloat)))
 	glEnableVertexAttribArray(3)
+
+	glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(RenderingVertex), Ptr{Cvoid}(11 * sizeof(GLfloat)))
+	glEnableVertexAttribArray(4)
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO)
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, length(indexes) * sizeof(UInt32), C_NULL, GL_STATIC_DRAW)
@@ -157,11 +178,64 @@ function GraphicsMeshCreate(vertices::Vector{Vertex}, triangles::Vector{DVec3f})
 	return Mesh(VAO, VBO, EBO, vertices, triangles)
 end
 
+function SelectionBoxSetup()::Tuple{GLuint, GLuint, GLuint}
+	VAORef = Ref{GLuint}(0)
+	VBORef = Ref{GLuint}(0)
+	EBORef = Ref{GLuint}(0)
+	glGenVertexArrays(1, VAORef)
+	glGenBuffers(1, VBORef)
+	glGenBuffers(1, EBORef)
+
+	VAO = VAORef[]
+	VBO = VBORef[]
+	EBO = EBORef[]
+
+	data = GLint[0, 1, 2, 3]
+	indexes = GLuint[0, 1, 1, 2, 2, 3, 3, 0]
+
+	glBindVertexArray(VAO)
+
+	glBindBuffer(GL_ARRAY_BUFFER, VBO)
+	glBufferData(GL_ARRAY_BUFFER, length(data) * sizeof(GLint), C_NULL, GL_STATIC_DRAW)
+	glBufferSubData(GL_ARRAY_BUFFER, 0, length(data) * sizeof(GLint), data)
+
+	glVertexAttribIPointer(0, 1, GL_INT, sizeof(GLint), Ptr{Cvoid}(0 * sizeof(GLint)))
+	glEnableVertexAttribArray(0)
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO)
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, length(indexes) * sizeof(GLuint), C_NULL, GL_STATIC_DRAW)
+	glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, length(indexes) * sizeof(GLuint), indexes)
+
+	glBindVertexArray(0)
+
+	glBindBuffer(GL_ARRAY_BUFFER, 0)
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0)
+
+	return VAO, VBO, EBO
+end
+
 function GraphicsMeshRender(shader::Shader, mesh::Mesh)
 	glBindVertexArray(mesh.VAO)
 	glUseProgram(shader)
-	#normals_update_uniforms(&mesh.normal_info, shader)
 	glDrawElements(GL_TRIANGLES, length(mesh.triangles) * 3, GL_UNSIGNED_INT, C_NULL)
+	glUseProgram(0)
+	glBindVertexArray(0)
+end
+
+function GraphicsSelectionBoxRender(ctx::GraphicsCtx, p1::Vec2, p2::Vec2)
+	shader = ctx.selectionBoxShader
+	glUseProgram(shader)
+	glBindVertexArray(ctx.selectionBoxVAO)
+
+	p1Location = glGetUniformLocation(shader, "p1")
+	p2Location = glGetUniformLocation(shader, "p2")
+	glUniform2f(p1Location, Float32(p1[1]), Float32(p1[2]))
+	glUniform2f(p2Location, Float32(p2[1]), Float32(p2[2]))
+
+	glDisable(GL_DEPTH_TEST)
+	glDrawElements(GL_LINES, 8, GL_UNSIGNED_INT, C_NULL)
+	glEnable(GL_DEPTH_TEST)
+
 	glUseProgram(0)
 	glBindVertexArray(0)
 end
@@ -211,6 +285,22 @@ end
 
 function GraphicsEntityRenderBasicShader(ctx::GraphicsCtx, camera::PerspectiveCamera, entity::Entity)
 	shader = ctx.basicShader
+	glUseProgram(shader)
+	modelMatrixLocation = glGetUniformLocation(shader, "model_matrix")
+	viewMatrixLocation = glGetUniformLocation(shader, "view_matrix")
+	projectionMatrixLocation = glGetUniformLocation(shader, "projection_matrix")
+	modelMatrixArr = Matrix4ToFloat32Array(entity.modelMatrix)
+	viewMatrixArr = Matrix4ToFloat32Array(camera.viewMatrix)
+	projectionMatrixArr = Matrix4ToFloat32Array(camera.projectionMatrix)
+	glUniformMatrix4fv(modelMatrixLocation, 1, GL_TRUE, modelMatrixArr)
+	glUniformMatrix4fv(viewMatrixLocation, 1, GL_TRUE, viewMatrixArr)
+	glUniformMatrix4fv(projectionMatrixLocation, 1, GL_TRUE, projectionMatrixArr)
+	GraphicsMeshRender(shader, entity.mesh)
+	glUseProgram(0)
+end
+
+function GraphicsEntityRenderSelectionShader(ctx::GraphicsCtx, camera::PerspectiveCamera, entity::Entity)
+	shader = ctx.selectionShader
 	glUseProgram(shader)
 	modelMatrixLocation = glGetUniformLocation(shader, "model_matrix")
 	viewMatrixLocation = glGetUniformLocation(shader, "view_matrix")

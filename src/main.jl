@@ -22,9 +22,11 @@ const defaultWindowHeight = 768
 include("vectors.jl")
 include("quaternion.jl")
 include("camera.jl")
+include("selection.jl")
 include("graphics.jl")
 include("ui.jl")
 include("core.jl")
+include("util.jl")
 
 function Start()
 	function GlfwKeyCallback(window::GLFW.Window, key::GLFW.Key, scanCode::Integer, action::GLFW.Action, mods::Integer)
@@ -34,7 +36,7 @@ function Start()
 
 		if key == GLFW.KEY_ESCAPE && action == GLFW.PRESS
 			if isMenuVisible
-				GLFW.SetInputMode(window, GLFW.CURSOR, GLFW.CURSOR_DISABLED)
+				#GLFW.SetInputMode(window, GLFW.CURSOR, GLFW.CURSOR_DISABLED)
 			else
 				GLFW.SetInputMode(window, GLFW.CURSOR, GLFW.CURSOR_NORMAL)
 			end
@@ -82,6 +84,7 @@ function Start()
 		GLFW.WindowHint(GLFW.RESIZABLE, true)
 		GLFW.WindowHint(GLFW.OPENGL_FORWARD_COMPAT, true)
 		GLFW.WindowHint(GLFW.OPENGL_PROFILE, GLFW.OPENGL_CORE_PROFILE)
+		#GLFW.WindowHint(GLFW.OPENGL_DEBUG_CONTEXT, true)
 
 		# setup GLFW error callback
 		ErrorCallback(err::GLFW.GLFWError) = @error "GLFW ERROR: code $(err.code) msg: $(err.description)"

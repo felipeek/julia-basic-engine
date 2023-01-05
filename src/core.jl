@@ -1,3 +1,9 @@
+mutable struct SelectionBoxState
+	active::Bool
+	p1::Vec2
+	p2::Vec2
+end
+
 mutable struct CoreCtx
 	graphicsCtx::GraphicsCtx
 
@@ -7,6 +13,7 @@ mutable struct CoreCtx
 	wireframe::Bool
 	xPosOld::Real
 	yPosOld::Real
+	selectionBoxState::SelectionBoxState
 
 	windowWidth::Integer
 	windowHeight::Integer
@@ -37,7 +44,7 @@ end
 function CreateEntity()::Entity
 	mesh = GraphicsMeshCreateFromObj("./res/spot.obj")
 	return GraphicsEntityCreate(mesh, Vec3(0.0, 0.0, 0.0), QuaternionNew(Vec3(0.0, 1.0, 0.0), 135.0), Vec3(1.0, 1.0, 1.0),
-		Vec4(113 / 255, 199 / 255, 236 / 255, 1))
+		Vec4(0.8, 0.8, 0.8, 1))
 end
 
 function CoreInit(windowWidth::Integer, windowHeight::Integer)::CoreCtx
@@ -48,8 +55,9 @@ function CoreInit(windowWidth::Integer, windowHeight::Integer)::CoreCtx
 	e = CreateEntity()
 	wireframe = false
 	keyState = DefaultDict{GLFW.Key, Bool}(false)
+	selectionBoxState = SelectionBoxState(false, Vec2(0, 0), Vec2(0, 0))
 
-	return CoreCtx(graphicsCtx, camera, lights, e, wireframe, 0, 0, windowWidth, windowHeight, keyState)
+	return CoreCtx(graphicsCtx, camera, lights, e, wireframe, 0, 0, selectionBoxState, windowWidth, windowHeight, keyState)
 end
 
 function CoreDestroy(ctx::CoreCtx)
@@ -59,7 +67,17 @@ function CoreUpdate(ctx::CoreCtx, deltaTime::Real)
 end
 
 function CoreRender(ctx::CoreCtx)
-	GraphicsEntityRenderPhongShader(ctx.graphicsCtx, ctx.camera, ctx.e, ctx.lights)
+	#GraphicsEntityRenderPhongShader(ctx.graphicsCtx, ctx.camera, ctx.e, ctx.lights)
+	#GraphicsEntityRenderBasicShader(ctx.graphicsCtx, ctx.camera, ctx.e)
+	GraphicsEntityRenderSelectionShader(ctx.graphicsCtx, ctx.camera, ctx.e)
+
+	if ctx.selectionBoxState.active
+		GraphicsSelectionBoxRender(
+			ctx.graphicsCtx,
+			MapRange(0.0, 1.0, -1.0, 1.0, ctx.selectionBoxState.p1),
+			MapRange(0.0, 1.0, -1.0, 1.0, ctx.selectionBoxState.p2)
+		)
+	end
 end
 
 function CoreInputProcess(ctx::CoreCtx, deltaTime::Real)
@@ -137,24 +155,47 @@ function CoreKeyPressProcess(ctx::CoreCtx, key::GLFW.Key, scanCode::Integer, act
 end
 
 function CoreMouseChangeProcess(ctx::CoreCtx, reset::Bool, xPos::Real, yPos::Real)
-	# This constant is basically the mouse sensibility.
-	# @TODO: Allow mouse sensibility to be configurable.
-	cameraMouseSpeed = 0.1
-
-	if !reset
-		xDiff = xPos - ctx.xPosOld
-		yDiff = yPos - ctx.yPosOld
-
-		CameraRotateX(ctx.camera, cameraMouseSpeed * xDiff)
-		CameraRotateY(ctx.camera, cameraMouseSpeed * yDiff)
+	yPos = ctx.windowHeight - yPos
+	if ctx.selectionBoxState.active
+		ctx.selectionBoxState.p2 = Vec2(xPos / ctx.windowWidth, yPos / ctx.windowHeight)
 	end
 
-	ctx.xPosOld = xPos
-	ctx.yPosOld = yPos
+	## This constant is basically the mouse sensibility.
+	## @TODO: Allow mouse sensibility to be configurable.
+	#cameraMouseSpeed = 0.1
+
+	#if !reset
+	#	xDiff = xPos - ctx.xPosOld
+	#	yDiff = yPos - ctx.yPosOld
+
+	#	CameraRotateX(ctx.camera, cameraMouseSpeed * xDiff)
+	#	CameraRotateY(ctx.camera, cameraMouseSpeed * yDiff)
+	#end
+
+	#ctx.xPosOld = xPos
+	#ctx.yPosOld = yPos
 end
 
 function CoreMouseClickProcess(ctx::CoreCtx, button::GLFW.MouseButton, action::GLFW.Action, xPos::Real, yPos::Real)
 	yPos = ctx.windowHeight - yPos
+
+	if button == GLFW.MOUSE_BUTTON_1 # left click
+		if action == GLFW.PRESS
+			if !ctx.selectionBoxState.active
+				ctx.selectionBoxState.active = true
+				ctx.selectionBoxState.p1 = Vec2(xPos / ctx.windowWidth, yPos / ctx.windowHeight)
+				ctx.selectionBoxState.p2 = ctx.selectionBoxState.p1
+			end
+		end
+
+		if action == GLFW.RELEASE
+			if ctx.selectionBoxState.active
+				ctx.selectionBoxState.active = false
+				ctx.selectionBoxState.p2 = Vec2(xPos / ctx.windowWidth, yPos / ctx.windowHeight)
+				# do something
+			end
+		end
+	end
 end
 
 function CoreScrollChangeProcess(ctx::CoreCtx, xOffset::Real, yOffset::Real)

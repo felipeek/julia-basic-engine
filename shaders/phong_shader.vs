@@ -4,6 +4,7 @@ layout (location = 0) in vec3 vertex_position;
 layout (location = 1) in vec3 vertex_normal;
 layout (location = 2) in vec2 vertex_texture_coords;
 layout (location = 3) in vec3 vertex_bary_coords;
+layout (location = 4) in vec4 vertex_selection_color;
 
 out vec3 fragment_position;
 out vec3 fragment_normal;

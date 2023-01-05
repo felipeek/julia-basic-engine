@@ -10,6 +10,7 @@ const DVec2 = SVector{2, Int64}
 #GeometryBasics.Point3{T}(p::Vec3) where {T<:Real} = GeometryBasics.Point3{T}(p[1], p[2], p[3])
 #convert(::Type{GeometryBasics.Point3{T} where {T<:Real}}, p::Vec3) = GeometryBasics.Point3{T}(p[1], p[2], p[3])
 
+const Vec4f = SVector{4, Float32}
 const Vec3f = SVector{3, Float32}
 const Vec2f = SVector{2, Float32}
 const DVec3f = SVector{3, Int32}
