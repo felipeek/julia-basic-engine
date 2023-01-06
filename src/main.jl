@@ -18,8 +18,8 @@ using DataStructures
 #using Images
 using Profile
 
-const defaultWindowWidth = 1366
-const defaultWindowHeight = 768
+const defaultWindowWidth = 1000
+const defaultWindowHeight = 1000
 
 include("vectors.jl")
 include("quaternion.jl")

@@ -50,6 +50,16 @@ function CameraSetFarPlane(camera::Camera, farPlane::Real, windowWidth::Integer,
 	RecalculateProjectionMatrix(camera, windowWidth, windowHeight)
 end
 
+function CameraRotateXConsideringClickCoords(camera::Camera, xDifference::Real, mouseY::Real)
+	axis = mouseY * Vec3(0.0, 0.0, 1.0) + (1 - abs(mouseY)) * Vec3(0.0, 1.0, 0.0)
+	CameraRotate(camera, xDifference, axis)
+end
+
+function CameraRotateYConsideringClickCoords(camera::Camera, yDifference::Real, mouseX::Real)
+	axis = mouseX * Vec3(0.0, 0.0, 1.0) + (1 - abs(mouseX)) * Vec3(1.0, 0.0, 0.0)
+	CameraRotate(camera, yDifference, axis)
+end
+
 function CameraRotateX(camera::Camera, xDifference::Real)
 	CameraRotate(camera, xDifference, Vec3(0.0, 1.0, 0.0))
 end
@@ -186,6 +196,14 @@ end
 function LookAtCameraRotate(camera::LookAtCamera, xDifference::Real, yDifference::Real)
 	CameraRotateX(camera, xDifference)
 	CameraRotateY(camera, yDifference)
+	cameraView = CameraGetView(camera)
+	camera.position = camera.lookAtPosition - camera.lookAtDistance * cameraView
+	RecalculateViewMatrix(camera)
+end
+
+function LookAtCameraRotateConsideringClickCoords(camera::LookAtCamera, xDifference::Real, yDifference::Real, mouseX::Real, mouseY::Real)
+	CameraRotateXConsideringClickCoords(camera, xDifference, mouseY)
+	CameraRotateYConsideringClickCoords(camera, yDifference, mouseX)
 	cameraView = CameraGetView(camera)
 	camera.position = camera.lookAtPosition - camera.lookAtDistance * cameraView
 	RecalculateViewMatrix(camera)

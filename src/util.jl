@@ -10,26 +10,24 @@ function MapRange(a1::Real, a2::Real, b1::Real, b2::Real, s::Vec2)::Vec2
 	return Vec2(x, y)
 end
 
+# Convert window coords to NDC (from [0, WinWidth],[0, WinHeight] to [-1, 1])
+function WindowNormalizeCoordsToNdc(x::Real, y::Real, windowWidth::Integer, windowHeight::Integer)::Tuple{Real, Real}
+	y = windowHeight - y
+	x = (2 * x) / windowWidth - 1
+	y = (2 * y) / windowHeight - 1
+
+	return x, y
+end
+
 # Get mouse's click position and direction vector in World Coordinates
 # Inputs:
 # camera - camera to consider
-# mouseX, mouseY - mouse coordinates
-# convertMouseCoords - if false, received mouse coordinates will be considered to be
-# in range [-1, 1]. If true, the function will do the conversion from [0, WIDTH],[0, HEIGHT] to [-1, 1]
+# mouseX, mouseY - mouse coordinates in range [0, WindowWidth] and [0, WindowHeight]
 # Outputs:
 # Position: Click position in world coords
 # Direction: Direction vector in world coords
-function MouseGetRayWorldCoords(camera::Camera, mouseX::Real, mouseY::Real, convertMouseCoords::Bool,
-		windowWidth::Integer, windowHeight::Integer)::Tuple{Vec3, Vec3}
-
-	x = mouseX
-	y = mouseY
-
-	if convertMouseCoords
-		mouseY = windowHeight - mouseY
-		x = (2 * mouseX) / windowWidth - 1
-		y = (2 * mouseY) / windowHeight - 1
-	end
+function MouseGetRayWorldCoords(camera::Camera, mouseX::Real, mouseY::Real, windowWidth::Integer, windowHeight::Integer)::Tuple{Vec3, Vec3}
+	x, y = WindowNormalizeCoordsToNdc(mouseX, mouseY, windowWidth, windowHeight)
 
 	projMatrix = CameraGetProjectionMatrix(camera)
 	viewMatrix = CameraGetViewMatrix(camera)

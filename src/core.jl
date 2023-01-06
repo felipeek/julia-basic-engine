@@ -171,7 +171,11 @@ function CoreMouseChangeProcess(ctx::CoreCtx, reset::Bool, xPos::Real, yPos::Rea
 
 			pitch = -ctx.cameraMovementState.rotationSpeed * xDiff
 			yaw = ctx.cameraMovementState.rotationSpeed * yDiff
-			LookAtCameraRotate(ctx.camera, -pitch, -yaw)
+
+			mouseX, mouseY = WindowNormalizeCoordsToNdc(ctx.cameraMovementState.mouseChangeXPosOld, ctx.cameraMovementState.mouseChangeYPosOld,
+				ctx.windowWidth, ctx.windowHeight)
+
+			LookAtCameraRotateConsideringClickCoords(ctx.camera, -pitch, -yaw, -mouseX, mouseY)
 		end
 	end
 
@@ -229,13 +233,6 @@ function CoreMouseClickProcess(ctx::CoreCtx, button::GLFW.MouseButton, action::G
 			end
 		end
 	elseif button == GLFW.MOUSE_BUTTON_2 # right click
-		#tmp
-		#position, direction = MouseGetRayWorldCoords(ctx.camera, xPos, yPos, true, ctx.windowWidth, ctx.windowHeight)
-		#println("Got position=", position, " and direction=", direction)
-		#direction = QuaternionGetMatrix(QuaternionInverse(ctx.camera.rotation)) * Vec4(direction[1], direction[2], direction[3], 0.0)
-		#direction = Vec3(direction[1], direction[2], direction[3])
-		#println("Got inv dir=", direction)
-
 		if action == GLFW.PRESS
 			ctx.cameraMovementState.isRotatingCamera = true
 		end
