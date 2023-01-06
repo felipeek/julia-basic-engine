@@ -124,8 +124,12 @@ function CoreInputProcess(ctx::CoreCtx, deltaTime::Real)
 	end
 
 	if ctx.keyState[GLFW.KEY_M]
-		GraphicsMeshUpdate(ctx.e.mesh, ctx.e.mesh.vertices, ctx.e.mesh.triangles,
-			Bool[i % 2 == 0 ? true : false for i=1:length(ctx.e.mesh.triangles)])
+		triangleHoles = SelectionGetHoles(ctx.selectedTriangles, ctx.e.mesh.triangles)
+		println("Got ", length(triangleHoles), " holes")
+		for t in triangleHoles
+			ctx.selectedTriangles[t] = true
+		end
+		GraphicsMeshUpdate(ctx.e.mesh, ctx.e.mesh.vertices, ctx.e.mesh.triangles, ctx.selectedTriangles)
 		ctx.keyState[GLFW.KEY_M] = false
 	end
 end

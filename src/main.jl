@@ -15,7 +15,7 @@ using FileIO
 using MeshIO
 using LinearAlgebra
 using DataStructures
-using Images
+#using Images
 
 const defaultWindowWidth = 1366
 const defaultWindowHeight = 768

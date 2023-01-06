@@ -156,3 +156,48 @@ function GetTrianglesWithinSelectionBox(entity::Entity, graphicsCtx::GraphicsCtx
 
 	return selectedTrianglesIdxs
 end
+
+function CollectIsland(triangleIdx::Integer, selectedTriangles::Vector{Bool},
+		trianglesAdjacency::AbstractDict{<:Integer, <:Set{<:Integer}})::Set{<:Integer}
+	island = Set{Int64}()
+	trianglesToAnalyze = Vector{Int64}()
+
+	@assert !selectedTriangles[triangleIdx]
+	push!(island, triangleIdx)
+	push!(trianglesToAnalyze, triangleIdx)
+
+	while length(trianglesToAnalyze) > 0
+		triangleIdx = pop!(trianglesToAnalyze)
+		neighbors = trianglesAdjacency[triangleIdx]
+
+		for neighbor in neighbors
+			if neighbor in island || selectedTriangles[neighbor]
+				continue
+			end
+
+			push!(island, neighbor)
+			push!(trianglesToAnalyze, neighbor)
+		end
+	end
+
+	return island
+end
+
+function SelectionGetHoles(selectedTriangles::Vector{Bool}, triangles::Vector{DVec3})::Set{<:Integer}
+	trianglesAdjacency = GetTrianglesAdjacency(triangles)
+	islandMembers = Set{Int64}()
+	triangleHoles = Set{Int64}()
+
+	for i = 1:length(selectedTriangles)
+		if !(i in islandMembers) && !selectedTriangles[i]
+			island = CollectIsland(i, selectedTriangles, trianglesAdjacency)
+			islandMembers = union(island, islandMembers)
+
+			if length(island) < 100
+				triangleHoles = union(triangleHoles, island)
+			end
+		end
+	end
+
+	return triangleHoles
+end
