@@ -192,7 +192,7 @@ function SelectionGetHoles(selectedTriangles::Vector{Bool}, trianglesAdjacency::
 		if !islandMembers[i] && selectedTriangles[i] == findUnselectedHoles
 			island = CollectIsland(i, selectedTriangles, trianglesAdjacency, findUnselectedHoles)
 			for t in island
-				if length(island) < 100
+				if length(island) < 1000
 					push!(triangleHoles, t)
 				end
 				islandMembers[t] = true

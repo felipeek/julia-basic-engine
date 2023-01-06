@@ -8,7 +8,6 @@ mutable struct PerspectiveCamera <: Camera
 	viewMatrix::Matrix
 	projectionMatrix::Matrix
 	rotation::Quaternion
-	yRotation::Quaternion
 end
 
 mutable struct LookAtCamera <: Camera
@@ -19,7 +18,6 @@ mutable struct LookAtCamera <: Camera
 	viewMatrix::Matrix
 	projectionMatrix::Matrix
 	rotation::Quaternion
-	yRotation::Quaternion
 
 	lookAtPosition::Vec3
 	lookAtDistance::Real
@@ -27,8 +25,7 @@ end
 
 function PerspectiveCamera(position::Vec3, nearPlane::Real, farPlane::Real, fov::Real, windowWidth::Integer, windowHeight::Integer)::PerspectiveCamera
 	rotation = Quaternion(0, 0, 0, 1)
-	yRotation = Quaternion(0, 0, 0, 1)
-	camera = PerspectiveCamera(position, nearPlane, farPlane, fov, zeros(4, 4), zeros(4, 4), rotation, yRotation)
+	camera = PerspectiveCamera(position, nearPlane, farPlane, fov, zeros(4, 4), zeros(4, 4), rotation)
 	RecalculateViewMatrix(camera)
 	RecalculateProjectionMatrix(camera, windowWidth, windowHeight)
 	return camera
@@ -54,25 +51,24 @@ function CameraSetFarPlane(camera::Camera, farPlane::Real, windowWidth::Integer,
 end
 
 function CameraRotateX(camera::Camera, xDifference::Real)
-	yAxis = QuaternionNew(Vec3(0.0, 1.0, 0.0), xDifference)
-	camera.yRotation = yAxis * camera.yRotation
-	QuaternionNormalize(camera.yRotation)
-	RecalculateViewMatrix(camera)
+	CameraRotate(camera, xDifference, Vec3(0.0, 1.0, 0.0))
 end
 
 function CameraRotateY(camera::Camera, yDifference::Real)
-	right = QuaternionGetRightInverted(camera.rotation)
-	right = normalize(right)
-	xAxis = QuaternionNew(right, yDifference)
-	camera.rotation = camera.rotation * xAxis
+	CameraRotate(camera, yDifference, Vec3(1.0, 0.0, 0.0))
+end
+
+function CameraRotate(camera::Camera, angle::Real, axis::Vec3)
+	axis = QuaternionNew(axis, angle)
+	camera.rotation = axis * camera.rotation
 	QuaternionNormalize(camera.rotation)
 	RecalculateViewMatrix(camera)
 end
 
 function CameraMoveForward(camera::Camera, amount::Real)
-	f = camera.rotation * camera.yRotation
+	q = camera.rotation
 
-	forward = QuaternionGetForwardInverted(f)
+	forward = QuaternionGetForwardInverted(q)
 	forward = amount * normalize(forward)
 	camera.position = Vec3(-forward.x, -forward.y, -forward.z) + camera.position
 
@@ -80,9 +76,9 @@ function CameraMoveForward(camera::Camera, amount::Real)
 end
 
 function CameraMoveRight(camera::Camera, amount::Real)
-	f = camera.rotation * camera.yRotation
+	q = camera.rotation
 
-	right = QuaternionGetRightInverted(f)
+	right = QuaternionGetRightInverted(q)
 	right = amount * normalize(right)
 	camera.position = Vec3(right.x, right.y, right.z) + camera.position
 
@@ -90,21 +86,21 @@ function CameraMoveRight(camera::Camera, amount::Real)
 end
 
 function CameraGetXAxis(camera::Camera)::Vec3
-	q = camera.rotation * camera.yRotation
+	q = camera.rotation
 	right = QuaternionGetRightInverted(q)
 	right = normalize(right)
 	return Vec3(right.x, right.y, right.z)
 end
 
 function CameraGetYAxis(camera::Camera)::Vec3
-	q = camera.rotation * camera.yRotation
+	q = camera.rotation
 	up = QuaternionGetUpInverted(q)
 	up = normalize(up)
 	return Vec3(up.x, up.y, up.z)
 end
 
 function CameraGetZAxis(camera::Camera)::Vec3
-	q = camera.rotation * camera.yRotation
+	q = camera.rotation
 	forward = QuaternionGetForwardInverted(q)
 	forward = normalize(forward)
 	return Vec3(forward.x, forward.y, forward.z)
@@ -142,7 +138,7 @@ function RecalculateViewMatrix(camera::Camera)
 		0 0 0 1
 	]
 
-	f = camera.rotation * camera.yRotation
+	f = camera.rotation
 
 	rotation = QuaternionGetMatrix(f)
 	camera.viewMatrix = rotation * trans
@@ -181,8 +177,7 @@ function LookAtCamera(lookAtPosition::Vec3, lookAtDistance::Real, nearPlane::Rea
 	cameraView = Vec3(0, 0, -1)
 	position = lookAtPosition - lookAtDistance * normalize(cameraView)
 	rotation = Quaternion(0, 0, 0, 1)
-	yRotation = Quaternion(0, 0, 0, 1)
-	camera = LookAtCamera(position, nearPlane, farPlane, fov, zeros(4, 4), zeros(4, 4), rotation, yRotation, lookAtPosition, lookAtDistance)
+	camera = LookAtCamera(position, nearPlane, farPlane, fov, zeros(4, 4), zeros(4, 4), rotation, lookAtPosition, lookAtDistance)
 	RecalculateViewMatrix(camera)
 	RecalculateProjectionMatrix(camera, windowWidth, windowHeight)
 	return camera
