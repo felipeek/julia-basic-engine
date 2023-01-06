@@ -21,6 +21,7 @@ mutable struct CoreCtx
 	lights::Vector{Light}
 	e::Entity
 	selectedTriangles::Vector{Bool}
+	trianglesAdjacency::AbstractDict{<:Integer, <:Set{<:Integer}}
 	wireframe::Bool
 	cameraMovementState::CameraMovementState
 	selectionBoxState::SelectionBoxState
@@ -75,12 +76,13 @@ function CoreInit(windowWidth::Integer, windowHeight::Integer)::CoreCtx
 	lights = CreateLights()
 	e = CreateEntity()
 	selectedTriangles = [false for i = 1:length(e.mesh.triangles)]
+	trianglesAdjacency = GetTrianglesAdjacency(e.mesh.triangles)
 	wireframe = false
 	keyState = DefaultDict{GLFW.Key, Bool}(false)
 	cameraMovementState = CameraMovementState(false, false, 0, 0, 0.2, 0.1, 0.001)
 	selectionBoxState = SelectionBoxState(false, Vec2(0, 0), Vec2(0, 0))
 
-	return CoreCtx(graphicsCtx, camera, lights, e, selectedTriangles, wireframe, cameraMovementState,
+	return CoreCtx(graphicsCtx, camera, lights, e, selectedTriangles, trianglesAdjacency, wireframe, cameraMovementState,
 		selectionBoxState, windowWidth, windowHeight, keyState)
 end
 
@@ -123,14 +125,24 @@ function CoreInputProcess(ctx::CoreCtx, deltaTime::Real)
 		ctx.keyState[GLFW.KEY_L] = false
 	end
 
-	if ctx.keyState[GLFW.KEY_M]
-		triangleHoles = SelectionGetHoles(ctx.selectedTriangles, ctx.e.mesh.triangles)
+	if ctx.keyState[GLFW.KEY_F]
+		triangleHoles = SelectionGetHoles(ctx.selectedTriangles, ctx.trianglesAdjacency, false)
 		println("Got ", length(triangleHoles), " holes")
 		for t in triangleHoles
 			ctx.selectedTriangles[t] = true
 		end
 		GraphicsMeshUpdate(ctx.e.mesh, ctx.e.mesh.vertices, ctx.e.mesh.triangles, ctx.selectedTriangles)
-		ctx.keyState[GLFW.KEY_M] = false
+		ctx.keyState[GLFW.KEY_F] = false
+	end
+
+	if ctx.keyState[GLFW.KEY_G]
+		triangleHoles = SelectionGetHoles(ctx.selectedTriangles, ctx.trianglesAdjacency, true)
+		println("Got ", length(triangleHoles), " holes")
+		for t in triangleHoles
+			ctx.selectedTriangles[t] = false
+		end
+		GraphicsMeshUpdate(ctx.e.mesh, ctx.e.mesh.vertices, ctx.e.mesh.triangles, ctx.selectedTriangles)
+		ctx.keyState[GLFW.KEY_G] = false
 	end
 end
 

@@ -158,11 +158,11 @@ function GetTrianglesWithinSelectionBox(entity::Entity, graphicsCtx::GraphicsCtx
 end
 
 function CollectIsland(triangleIdx::Integer, selectedTriangles::Vector{Bool},
-		trianglesAdjacency::AbstractDict{<:Integer, <:Set{<:Integer}})::Set{<:Integer}
+		trianglesAdjacency::AbstractDict{<:Integer, <:Set{<:Integer}}, findUnselectedHoles::Bool)::Set{<:Integer}
 	island = Set{Int64}()
 	trianglesToAnalyze = Vector{Int64}()
 
-	@assert !selectedTriangles[triangleIdx]
+	@assert selectedTriangles[triangleIdx] == findUnselectedHoles
 	push!(island, triangleIdx)
 	push!(trianglesToAnalyze, triangleIdx)
 
@@ -171,7 +171,7 @@ function CollectIsland(triangleIdx::Integer, selectedTriangles::Vector{Bool},
 		neighbors = trianglesAdjacency[triangleIdx]
 
 		for neighbor in neighbors
-			if neighbor in island || selectedTriangles[neighbor]
+			if neighbor in island || selectedTriangles[neighbor] == !findUnselectedHoles
 				continue
 			end
 
@@ -183,18 +183,19 @@ function CollectIsland(triangleIdx::Integer, selectedTriangles::Vector{Bool},
 	return island
 end
 
-function SelectionGetHoles(selectedTriangles::Vector{Bool}, triangles::Vector{DVec3})::Set{<:Integer}
-	trianglesAdjacency = GetTrianglesAdjacency(triangles)
-	islandMembers = Set{Int64}()
+function SelectionGetHoles(selectedTriangles::Vector{Bool}, trianglesAdjacency::AbstractDict{<:Integer, <:Set{<:Integer}},
+		findUnselectedHoles::Bool)::Set{<:Integer}
+	islandMembers = [false for i = 1:length(selectedTriangles)]
 	triangleHoles = Set{Int64}()
 
 	for i = 1:length(selectedTriangles)
-		if !(i in islandMembers) && !selectedTriangles[i]
-			island = CollectIsland(i, selectedTriangles, trianglesAdjacency)
-			islandMembers = union(island, islandMembers)
-
-			if length(island) < 100
-				triangleHoles = union(triangleHoles, island)
+		if !islandMembers[i] && selectedTriangles[i] == findUnselectedHoles
+			island = CollectIsland(i, selectedTriangles, trianglesAdjacency, findUnselectedHoles)
+			for t in island
+				if length(island) < 100
+					push!(triangleHoles, t)
+				end
+				islandMembers[t] = true
 			end
 		end
 	end

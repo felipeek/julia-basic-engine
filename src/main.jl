@@ -16,6 +16,7 @@ using MeshIO
 using LinearAlgebra
 using DataStructures
 #using Images
+using Profile
 
 const defaultWindowWidth = 1366
 const defaultWindowHeight = 768
