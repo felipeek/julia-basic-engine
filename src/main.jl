@@ -18,13 +18,17 @@ using DataStructures
 
 const defaultWindowWidth = 1366
 const defaultWindowHeight = 768
+const useFreeCamera = true
 
 include("vectors.jl")
 include("quaternion.jl")
-include("camera.jl")
+include("camera/camera.jl")
+include("camera/free.jl")
+include("camera/lookat.jl")
 include("graphics.jl")
 include("ui.jl")
 include("core.jl")
+include("util.jl")
 
 function Start()
 	function GlfwKeyCallback(window::GLFW.Window, key::GLFW.Key, scanCode::Integer, action::GLFW.Action, mods::Integer)
@@ -33,7 +37,7 @@ function Start()
 		end
 
 		if key == GLFW.KEY_ESCAPE && action == GLFW.PRESS
-			if isMenuVisible
+			if isMenuVisible && useFreeCamera
 				GLFW.SetInputMode(window, GLFW.CURSOR, GLFW.CURSOR_DISABLED)
 			else
 				GLFW.SetInputMode(window, GLFW.CURSOR, GLFW.CURSOR_NORMAL)
@@ -114,7 +118,7 @@ function Start()
 	deltaTime = 0.0
 	window = GlfwInit()
 
-	coreCtx = CoreInit(defaultWindowWidth, defaultWindowHeight)
+	coreCtx = CoreInit(defaultWindowWidth, defaultWindowHeight, useFreeCamera)
 
 	glEnable(GL_DEPTH_TEST)
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)

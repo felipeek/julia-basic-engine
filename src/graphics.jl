@@ -142,15 +142,15 @@ function EntityRecalculateModelMatrix(entity::Entity)
 	entity.modelMatrix = translationMatrix * entity.modelMatrix
 end
 
-function GraphicsEntityRenderBasicShader(ctx::GraphicsCtx, camera::PerspectiveCamera, entity::Entity)
+function GraphicsEntityRenderBasicShader(ctx::GraphicsCtx, camera::Camera, entity::Entity)
 	shader = ctx.basicShader
 	glUseProgram(shader)
 	modelMatrixLocation = glGetUniformLocation(shader, "model_matrix")
 	viewMatrixLocation = glGetUniformLocation(shader, "view_matrix")
 	projectionMatrixLocation = glGetUniformLocation(shader, "projection_matrix")
 	modelMatrixArr = MatrixToArray(entity.modelMatrix, Float32)
-	viewMatrixArr = MatrixToArray(camera.viewMatrix, Float32)
-	projectionMatrixArr = MatrixToArray(camera.projectionMatrix, Float32)
+	viewMatrixArr = MatrixToArray(CameraGetViewMatrix(camera), Float32)
+	projectionMatrixArr = MatrixToArray(CameraGetProjectionMatrix(camera), Float32)
 	glUniformMatrix4fv(modelMatrixLocation, 1, GL_TRUE, modelMatrixArr)
 	glUniformMatrix4fv(viewMatrixLocation, 1, GL_TRUE, viewMatrixArr)
 	glUniformMatrix4fv(projectionMatrixLocation, 1, GL_TRUE, projectionMatrixArr)
@@ -158,7 +158,7 @@ function GraphicsEntityRenderBasicShader(ctx::GraphicsCtx, camera::PerspectiveCa
 	glUseProgram(0)
 end
 
-function GraphicsEntityRenderPhongShader(ctx::GraphicsCtx, camera::PerspectiveCamera, entity::Entity, lights::Vector{Light})
+function GraphicsEntityRenderPhongShader(ctx::GraphicsCtx, camera::Camera, entity::Entity, lights::Vector{Light})
 	shader = ctx.phongShader
 	glUseProgram(shader)
 	LightUpdateUniforms(lights, shader)
@@ -169,11 +169,12 @@ function GraphicsEntityRenderPhongShader(ctx::GraphicsCtx, camera::PerspectiveCa
 	projectionMatrixLocation = glGetUniformLocation(shader, "projection_matrix")
 	diffuseColorLocation = glGetUniformLocation(shader, "diffuse_color")
 
+	cameraPosition = CameraGetPosition(camera)
 	modelMatrixArr = MatrixToArray(entity.modelMatrix, Float32)
-	viewMatrixArr = MatrixToArray(camera.viewMatrix, Float32)
-	projectionMatrixArr = MatrixToArray(camera.projectionMatrix, Float32)
+	viewMatrixArr = MatrixToArray(CameraGetViewMatrix(camera), Float32)
+	projectionMatrixArr = MatrixToArray(CameraGetProjectionMatrix(camera), Float32)
 
-	glUniform3f(cameraPositionLocation, camera.position.x, camera.position.y, camera.position.z)
+	glUniform3f(cameraPositionLocation, cameraPosition.x, cameraPosition.y, cameraPosition.z)
 	glUniform1f(shininessLocation, 128.0)
 	glUniformMatrix4fv(modelMatrixLocation, 1, GL_TRUE, modelMatrixArr)
 	glUniformMatrix4fv(viewMatrixLocation, 1, GL_TRUE, viewMatrixArr)
