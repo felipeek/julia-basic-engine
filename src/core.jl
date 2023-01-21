@@ -6,7 +6,7 @@ mutable struct CoreCtx
 	useFreeCamera::Bool
 	isRotatingCamera::Bool
 	isPanningCamera::Bool
-	alternativePanningMethod::Bool
+	alternativePanningMethod::Bool # if true, pan via shift instead of mouse3
 	rotationSpeed::Real
 	zoomSpeed::Real
 	panningSpeed::Real
@@ -21,6 +21,8 @@ mutable struct CoreCtx
 	windowWidth::Integer
 	windowHeight::Integer
 	keyState::AbstractDict{GLFW.Key, Bool}
+	shiftState::Bool
+	ctrlState::Bool
 end
 
 function CreateFreeCamera(windowWidth::Integer, windowHeight::Integer)::FreeCamera
@@ -75,7 +77,8 @@ function CoreInit(windowWidth::Integer, windowHeight::Integer, useFreeCamera::Bo
 	wireframe = false
 	keyState = DefaultDict{GLFW.Key, Bool}(false)
 
-	return CoreCtx(graphicsCtx, camera, useFreeCamera, false, false, false,  0.2, 0.1, 0.001, true, lights, e, wireframe, 0, 0, windowWidth, windowHeight, keyState)
+	return CoreCtx(graphicsCtx, camera, useFreeCamera, false, false, false,  0.2, 0.1, 0.001, true, lights, e, wireframe, 0, 0,
+		windowWidth, windowHeight, keyState, false, false)
 end
 
 function CoreDestroy(ctx::CoreCtx)
@@ -123,19 +126,47 @@ function CoreInputProcess(ctx::CoreCtx, deltaTime::Real)
 		ctx.wireframe = !ctx.wireframe
 		ctx.keyState[GLFW.KEY_L] = false
 	end
+
+	if ctx.alternativePanningMethod
+		if !ctx.shiftState
+			ctx.isPanningCamera = false
+		else
+			ctx.isPanningCamera = true
+		end
+	end
 end
 
 function CoreKeyPressProcess(ctx::CoreCtx, key::GLFW.Key, scanCode::Integer, action::GLFW.Action, mods::Integer)
 	if action == GLFW.PRESS
 		ctx.keyState[key] = true
+
+		if key == GLFW.KEY_LEFT_SHIFT || key == GLFW.KEY_RIGHT_SHIFT
+			ctx.shiftState = true
+		end
+
+		if key == GLFW.KEY_LEFT_CONTROL || key == GLFW.KEY_RIGHT_CONTROL
+			ctx.ctrlState = true
+		end
 	end
 
 	if action == GLFW.RELEASE
 		ctx.keyState[key] = false
+
+		if key == GLFW.KEY_LEFT_SHIFT || key == GLFW.KEY_RIGHT_SHIFT
+			ctx.shiftState = false
+		end
+
+		if key == GLFW.KEY_LEFT_CONTROL || key == GLFW.KEY_RIGHT_CONTROL
+			ctx.ctrlState = false
+		end
 	end
 end
 
 function CoreMouseChangeProcess(ctx::CoreCtx, reset::Bool, xPos::Real, yPos::Real)
+	if !useFreeCamera
+		yPos = ctx.windowHeight - yPos
+	end
+
 	xDiff = xPos - ctx.mouseChangeXPosOld
 	yDiff = yPos - ctx.mouseChangeYPosOld
 
@@ -146,8 +177,6 @@ function CoreMouseChangeProcess(ctx::CoreCtx, reset::Bool, xPos::Real, yPos::Rea
 			CameraRotateY(ctx.camera, cameraMouseSpeed * yDiff)
 		end
 	else
-		yPos = ctx.windowHeight - yPos
-
 		if ctx.isRotatingCamera
 			if !reset
 				pitch = -ctx.rotationSpeed * xDiff

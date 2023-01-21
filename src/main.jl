@@ -18,7 +18,7 @@ using DataStructures
 
 const defaultWindowWidth = 1366
 const defaultWindowHeight = 768
-const useFreeCamera = true
+const useFreeCamera = false
 
 include("vectors.jl")
 include("quaternion.jl")
