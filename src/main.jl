@@ -71,7 +71,7 @@ function Start()
 	end
 
 	function GlfwResizeCallback(window::GLFW.Window, width::Integer, height::Integer)
-		glViewport(0, 0, width, height)
+		ViewportBasedOnWindowSize(0, 0, width, height)
 		CoreWindowResizeProcess(coreCtx, width, height)
 	end
 
@@ -117,6 +117,9 @@ function Start()
 
 	deltaTime = 0.0
 	window = GlfwInit()
+
+	effectiveWindowWidth, effectiveWindowHeight = GLFW.GetWindowSize(window)
+	ViewportBasedOnWindowSize(0, 0, effectiveWindowWidth, effectiveWindowHeight)
 
 	coreCtx = CoreInit(defaultWindowWidth, defaultWindowHeight, useFreeCamera)
 
