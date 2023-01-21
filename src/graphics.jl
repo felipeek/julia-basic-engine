@@ -15,8 +15,8 @@ struct Mesh
 	VAO::UInt32
 	VBO::UInt32
 	EBO::UInt32
-	vertices::Vector{Vertex}
-	triangles::Vector{DVec3f}
+	points::Vector{Vec3}
+	triangles::Vector{DVec3}
 end
 
 mutable struct Entity
@@ -90,7 +90,179 @@ function GraphicsShaderCreate(vertexShaderPath::String, fragmentShaderPath::Stri
 	return shaderProgram
 end
 
-function GraphicsMeshCreate(vertices::Vector{Vertex}, triangles::Vector{DVec3f})::Mesh
+function GraphicsMeshRender(shader::Shader, mesh::Mesh)
+	glBindVertexArray(mesh.VAO)
+	glUseProgram(shader)
+	#normals_update_uniforms(&mesh.normal_info, shader)
+	glDrawElements(GL_TRIANGLES, length(mesh.triangles) * 3, GL_UNSIGNED_INT, C_NULL)
+	glUseProgram(0)
+	glBindVertexArray(0)
+end
+
+function GraphicsEntityCreate(mesh::Mesh, worldPosition::Vec3, worldRotation::Quaternion, worldScale::Vec3, color::Vec4)::Entity
+	entity = Entity(mesh, worldPosition, worldRotation, worldScale, zeros(4, 4), color)
+	EntityRecalculateModelMatrix(entity)
+
+	return entity
+end
+
+function GraphicsEntitySetPosition(entity::Entity, worldPosition::Vec3)
+	entity.worldPosition = worldPosition
+	EntityRecalculateModelMatrix(entity)
+end
+
+function GraphicsEntitySetRotation(entity::Entity, worldRotation::Quaternion)
+	entity.worldRotation = worldRotation
+	EntityRecalculateModelMatrix(entity)
+end
+
+function GraphicsEntitySetScale(entity::Entity, worldScale::Vec3)
+	entity.worldScale = worldScale
+	EntityRecalculateModelMatrix(entity)
+end
+
+function EntityRecalculateModelMatrix(entity::Entity)
+	scaleMatrix = [
+		entity.worldScale.x 0 0 0
+		0 entity.worldScale.y 0 0
+		0 0 entity.worldScale.z 0
+		0 0 0 1
+	]
+
+	rotationMatrix = QuaternionGetMatrix(entity.worldRotation)
+
+	translationMatrix = [
+		1 0 0 entity.worldPosition.x
+		0 1 0 entity.worldPosition.y
+		0 0 1 entity.worldPosition.z
+		0 0 0 1
+	]
+
+	entity.modelMatrix = rotationMatrix * scaleMatrix
+	entity.modelMatrix = translationMatrix * entity.modelMatrix
+end
+
+function GraphicsEntityRenderBasicShader(ctx::GraphicsCtx, camera::PerspectiveCamera, entity::Entity)
+	shader = ctx.basicShader
+	glUseProgram(shader)
+	modelMatrixLocation = glGetUniformLocation(shader, "model_matrix")
+	viewMatrixLocation = glGetUniformLocation(shader, "view_matrix")
+	projectionMatrixLocation = glGetUniformLocation(shader, "projection_matrix")
+	modelMatrixArr = MatrixToArray(entity.modelMatrix, Float32)
+	viewMatrixArr = MatrixToArray(camera.viewMatrix, Float32)
+	projectionMatrixArr = MatrixToArray(camera.projectionMatrix, Float32)
+	glUniformMatrix4fv(modelMatrixLocation, 1, GL_TRUE, modelMatrixArr)
+	glUniformMatrix4fv(viewMatrixLocation, 1, GL_TRUE, viewMatrixArr)
+	glUniformMatrix4fv(projectionMatrixLocation, 1, GL_TRUE, projectionMatrixArr)
+	GraphicsMeshRender(shader, entity.mesh)
+	glUseProgram(0)
+end
+
+function GraphicsEntityRenderPhongShader(ctx::GraphicsCtx, camera::PerspectiveCamera, entity::Entity, lights::Vector{Light})
+	shader = ctx.phongShader
+	glUseProgram(shader)
+	LightUpdateUniforms(lights, shader)
+	cameraPositionLocation = glGetUniformLocation(shader, "camera_position")
+	shininessLocation = glGetUniformLocation(shader, "object_shineness")
+	modelMatrixLocation = glGetUniformLocation(shader, "model_matrix")
+	viewMatrixLocation = glGetUniformLocation(shader, "view_matrix")
+	projectionMatrixLocation = glGetUniformLocation(shader, "projection_matrix")
+	diffuseColorLocation = glGetUniformLocation(shader, "diffuse_color")
+
+	modelMatrixArr = MatrixToArray(entity.modelMatrix, Float32)
+	viewMatrixArr = MatrixToArray(camera.viewMatrix, Float32)
+	projectionMatrixArr = MatrixToArray(camera.projectionMatrix, Float32)
+
+	glUniform3f(cameraPositionLocation, camera.position.x, camera.position.y, camera.position.z)
+	glUniform1f(shininessLocation, 128.0)
+	glUniformMatrix4fv(modelMatrixLocation, 1, GL_TRUE, modelMatrixArr)
+	glUniformMatrix4fv(viewMatrixLocation, 1, GL_TRUE, viewMatrixArr)
+	glUniformMatrix4fv(projectionMatrixLocation, 1, GL_TRUE, projectionMatrixArr)
+	glUniform4f(diffuseColorLocation, entity.diffuseColor[1], entity.diffuseColor[2], entity.diffuseColor[3], entity.diffuseColor[4])
+	GraphicsMeshRender(shader, entity.mesh)
+	glUseProgram(0)
+end
+
+function LightUpdateUniforms(lights::Vector{Light}, shader::Shader)
+	glUseProgram(shader)
+
+	for i in eachindex(lights)
+		light = lights[i]
+		uniformPrefix = "lights[" * string(i - 1) * "]."
+		lightPositionLocation = glGetUniformLocation(shader, uniformPrefix * "position")
+		ambientColorLocation = glGetUniformLocation(shader, uniformPrefix * "ambient_color")
+		diffuseColorLocation = glGetUniformLocation(shader, uniformPrefix * "diffuse_color")
+		specularColorLocation = glGetUniformLocation(shader, uniformPrefix * "specular_color")
+		glUniform3f(lightPositionLocation, light.position.x, light.position.y, light.position.z)
+		glUniform4f(ambientColorLocation, light.ambientColor[1], light.ambientColor[2], light.ambientColor[3], light.ambientColor[4])
+		glUniform4f(diffuseColorLocation, light.diffuseColor[1], light.diffuseColor[2], light.diffuseColor[3], light.diffuseColor[4])
+		glUniform4f(specularColorLocation, light.specularColor[1], light.specularColor[2], light.specularColor[3], light.specularColor[4])
+	end
+
+	lightQuantityLocation = glGetUniformLocation(shader, "light_quantity")
+	glUniform1i(lightQuantityLocation, length(lights))
+end
+
+function GraphicsMeshCreateFromObj(objPath::String)::Mesh
+	# Load a model mesh
+	rawMesh = FileIO.load(objPath)
+
+	# Transform the mesh data into a mesh container object
+	# This is a brute force approach because the triangles do not point to the point positions in the array...
+	# instead, they redefine every point...
+	positionToIdx = Dict()
+	for (i, position) in enumerate(rawMesh.position)
+		if haskey(positionToIdx, position)
+			@printf "Warning: found a duplicated vertex in the mesh. Attributes like normals and UVs may not be correct (MeshIO.jl limitation)\n"
+		end
+
+		positionToIdx[position] = i
+	end
+	
+	triangles = Vector{DVec3}()
+
+	for triangle in rawMesh
+		i1 = positionToIdx[triangle[1]]
+		i2 = positionToIdx[triangle[2]]
+		i3 = positionToIdx[triangle[3]]
+		push!(triangles, DVec3(i1, i2, i3))
+	end
+
+	uvCoords = hasproperty(rawMesh, :uv) ? [Vec2(rawMesh.uv[i]) for i in eachindex(rawMesh.uv)] :
+		[Vec2(0.0, 0.0) for _ in eachindex(rawMesh.position)]
+
+	return GraphicsMeshCreate([Vec3(p) for p in rawMesh.position], triangles, uvCoords)
+end
+
+function GraphicsMeshCreate(points::Vector{Vec3}, triangles::Vector{DVec3}, uvCoords::Vector{Vec2})::Mesh
+	# Generate normals
+	generatedNormals = fill(Vec3(0, 0, 0), length(points)) # Vec3 is immutable, so we can fill everything with the same reference
+
+	for t in triangles
+		i1 = t[1]
+		i2 = t[2]
+		i3 = t[3]
+
+		p1 = points[i1]
+		p2 = points[i2]
+		p3 = points[i3]
+
+		e1 = p2 - p1
+		e2 = p3 - p1
+
+		normal = cross(e1, e2)
+
+		generatedNormals[i1] += normal
+		generatedNormals[i2] += normal
+		generatedNormals[i3] += normal
+	end
+
+	return GraphicsMeshCreate(points, triangles, generatedNormals, uvCoords)
+end
+
+function GraphicsMeshCreate(points::Vector{Vec3}, triangles::Vector{DVec3}, normals::Vector{Vec3}, uvCoords::Vector{Vec2})::Mesh
+	vertices = [Vertex(points[i], normals[i], uvCoords[i]) for i in eachindex(points)]
+
 	indexes = Vector{UInt32}()
 	for t in triangles
 		push!(indexes, t[1] - 1)
@@ -133,212 +305,23 @@ function GraphicsMeshCreate(vertices::Vector{Vertex}, triangles::Vector{DVec3f})
 	glBindBuffer(GL_ARRAY_BUFFER, 0)
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0)
 
-	return Mesh(VAO, VBO, EBO, vertices, triangles)
+	return Mesh(VAO, VBO, EBO, points, triangles)
 end
 
-function GraphicsMeshRender(shader::Shader, mesh::Mesh)
-	glBindVertexArray(mesh.VAO)
-	glUseProgram(shader)
-	#normals_update_uniforms(&mesh.normal_info, shader)
-	glDrawElements(GL_TRIANGLES, length(mesh.triangles) * 3, GL_UNSIGNED_INT, C_NULL)
-	glUseProgram(0)
-	glBindVertexArray(0)
-end
+# Note: Julia matrices are column-major
+# OpenGL textures expect row-major data
+# GLSL uniforms expect column-major data
+# This function returns row-major data, and we use transpose=GL_TRUE when updating the uniforms
+function MatrixToArray(m::Matrix, ::Type{T})::Vector{T} where {T}
+	v = Vector{T}()
 
-function GraphicsEntityCreate(mesh::Mesh, worldPosition::Vec3, worldRotation::Quaternion, worldScale::Vec3, color::Vec4)::Entity
-	entity = Entity(mesh, worldPosition, worldRotation, worldScale, zeros(4, 4), color)
-	EntityRecalculateModelMatrix(entity)
+	height, width = size(m)
 
-	return entity
-end
-
-function GraphicsEntitySetPosition(entity::Entity, worldPosition::Vec3)
-	entity.worldPosition = worldPosition
-	EntityRecalculateModelMatrix(entity)
-end
-
-function GraphicsEntitySetRotation(entity::Entity, worldRotation::Quaternion)
-	entity.worldRotation = worldRotation
-	EntityRecalculateModelMatrix(entity)
-end
-
-function GraphicsEntitySetScale(entity::Entity, worldScale::Vec3)
-	entity.worldScale = worldScale
-	EntityRecalculateModelMatrix(entity)
-end
-
-function EntityRecalculateModelMatrix(entity::Entity)
-	scaleMatrix = [
-		entity.worldScale[1] 0 0 0
-		0 entity.worldScale[2] 0 0
-		0 0 entity.worldScale[3] 0
-		0 0 0 1
-	]
-
-	rotationMatrix = QuaternionGetMatrix(entity.worldRotation)
-
-	translationMatrix = [
-		1 0 0 entity.worldPosition.x
-		0 1 0 entity.worldPosition.y
-		0 0 1 entity.worldPosition.z
-		0 0 0 1
-	]
-
-	entity.modelMatrix = rotationMatrix * scaleMatrix
-	entity.modelMatrix = translationMatrix * entity.modelMatrix
-end
-
-function GraphicsEntityRenderBasicShader(ctx::GraphicsCtx, camera::PerspectiveCamera, entity::Entity)
-	shader = ctx.basicShader
-	glUseProgram(shader)
-	modelMatrixLocation = glGetUniformLocation(shader, "model_matrix")
-	viewMatrixLocation = glGetUniformLocation(shader, "view_matrix")
-	projectionMatrixLocation = glGetUniformLocation(shader, "projection_matrix")
-	modelMatrixArr = Matrix4ToFloat32Array(entity.modelMatrix)
-	viewMatrixArr = Matrix4ToFloat32Array(camera.viewMatrix)
-	projectionMatrixArr = Matrix4ToFloat32Array(camera.projectionMatrix)
-	glUniformMatrix4fv(modelMatrixLocation, 1, GL_TRUE, modelMatrixArr)
-	glUniformMatrix4fv(viewMatrixLocation, 1, GL_TRUE, viewMatrixArr)
-	glUniformMatrix4fv(projectionMatrixLocation, 1, GL_TRUE, projectionMatrixArr)
-	GraphicsMeshRender(shader, entity.mesh)
-	glUseProgram(0)
-end
-
-function GraphicsEntityRenderPhongShader(ctx::GraphicsCtx, camera::PerspectiveCamera, entity::Entity, lights::Vector{Light})
-	shader = ctx.phongShader
-	glUseProgram(shader)
-	LightUpdateUniforms(lights, shader)
-	cameraPositionLocation = glGetUniformLocation(shader, "camera_position")
-	shininessLocation = glGetUniformLocation(shader, "object_shineness")
-	modelMatrixLocation = glGetUniformLocation(shader, "model_matrix")
-	viewMatrixLocation = glGetUniformLocation(shader, "view_matrix")
-	projectionMatrixLocation = glGetUniformLocation(shader, "projection_matrix")
-	diffuseColorLocation = glGetUniformLocation(shader, "diffuse_color")
-
-	modelMatrixArr = Matrix4ToFloat32Array(entity.modelMatrix)
-	viewMatrixArr = Matrix4ToFloat32Array(camera.viewMatrix)
-	projectionMatrixArr = Matrix4ToFloat32Array(camera.projectionMatrix)
-
-	glUniform3f(cameraPositionLocation, Float32(camera.position[1]), Float32(camera.position[2]), Float32(camera.position[3]))
-	glUniform1f(shininessLocation, Float32(128.0))
-	glUniformMatrix4fv(modelMatrixLocation, 1, GL_TRUE, modelMatrixArr)
-	glUniformMatrix4fv(viewMatrixLocation, 1, GL_TRUE, viewMatrixArr)
-	glUniformMatrix4fv(projectionMatrixLocation, 1, GL_TRUE, projectionMatrixArr)
-	glUniform4f(diffuseColorLocation, Float32(entity.diffuseColor[1]), Float32(entity.diffuseColor[2]),
-		Float32(entity.diffuseColor[3]), Float32(entity.diffuseColor[4]))
-	GraphicsMeshRender(shader, entity.mesh)
-	glUseProgram(0)
-end
-
-function LightUpdateUniforms(lights::Vector{Light}, shader::Shader)
-	numberOfLights = length(lights)
-	glUseProgram(shader)
-
-	for i = 1:numberOfLights
-		light = lights[i]
-		uniformPrefix = "lights[" * string(i - 1) * "]."
-		lightPositionLocation = glGetUniformLocation(shader, uniformPrefix * "position")
-		ambientColorLocation = glGetUniformLocation(shader, uniformPrefix * "ambient_color")
-		diffuseColorLocation = glGetUniformLocation(shader, uniformPrefix * "diffuse_color")
-		specularColorLocation = glGetUniformLocation(shader, uniformPrefix * "specular_color")
-		glUniform3f(lightPositionLocation, Float32(light.position[1]), Float32(light.position[2]),
-			Float32(light.position[3]))
-		glUniform4f(ambientColorLocation, Float32(light.ambientColor[1]), Float32(light.ambientColor[2]),
-			Float32(light.ambientColor[3]), Float32(light.ambientColor[4]))
-		glUniform4f(diffuseColorLocation, Float32(light.diffuseColor[1]), Float32(light.diffuseColor[2]),
-			Float32(light.diffuseColor[3]), Float32(light.diffuseColor[4]))
-		glUniform4f(specularColorLocation, Float32(light.specularColor[1]), Float32(light.specularColor[2]),
-			Float32(light.specularColor[3]), Float32(light.specularColor[4]))
-	end
-
-	lightQuantityLocation = glGetUniformLocation(shader, "light_quantity")
-	glUniform1i(lightQuantityLocation, numberOfLights)
-end
-
-function GraphicsMeshCreateFromObj(objPath::String)::Mesh
-	# Load a model mesh
-	rawMesh = FileIO.load(objPath)
-
-	# Transform the mesh data into a mesh container object
-	# This is a brute force approach because the triangles do not point to the point positions in the array...
-	# instead, they redefine every point...
-	vertexToIdx = Dict()
-	for i = 1:length(rawMesh.position)
-		vertex = rawMesh.position[i]
-		
-		if haskey(vertexToIdx, vertex)
-			println("Warning: found a duplicated vertex in the mesh. Attributes like normals and UVs may not be correct (MeshIO.jl limitation)")
-		end
-
-		vertexToIdx[vertex] = i
-	end
-	
-	vertices = Vector{Vertex}()
-	triangles = Vector{DVec3f}()
-	mustGenerateNormals = !hasproperty(rawMesh, :normals)
-	local generatedNormals
-	hasUv = hasproperty(rawMesh, :uv)
-
-	for triangle in rawMesh
-		i1 = vertexToIdx[triangle[1]]
-		i2 = vertexToIdx[triangle[2]]
-		i3 = vertexToIdx[triangle[3]]
-		push!(triangles, DVec3f(i1, i2, i3))
-	end
-
-	if mustGenerateNormals
-		println("Object " * objPath * " does not have normals. Normals will be generated.")
-		generatedNormals = fill(Vec3f(0, 0, 0), length(rawMesh.position))
-
-		for t in triangles
-			i1 = t[1]
-			i2 = t[2]
-			i3 = t[3]
-
-			p1 = Vec3f(rawMesh.position[i1])
-			p2 = Vec3f(rawMesh.position[i2])
-			p3 = Vec3f(rawMesh.position[i3])
-
-			e1 = p2 - p1
-			e2 = p3 - p1
-
-			normal = cross(e1, e2)
-
-			generatedNormals[i1] += normal
-			generatedNormals[i2] += normal
-			generatedNormals[i3] += normal
+	for i = 1:height
+		for j = 1:width
+			push!(v, m[i, j])
 		end
 	end
-
-	for i = 1:length(rawMesh.position)
-		position = Vec3f(rawMesh.position[i])
-		normal = !mustGenerateNormals ? Vec3f(rawMesh.normals[i]) : generatedNormals[i]
-		uv = hasUv ? Vec2f(rawMesh.uv[i]) : Vec2f(0, 0)
-		push!(vertices, Vertex(position, normal, uv))
-	end
-
-	return GraphicsMeshCreate(vertices, triangles)
-end
-
-function Matrix4ToFloat32Array(m::Matrix)::Vector{Float32}
-	v = Vector{Float32}()
-
-	push!(v, m[1, 1])
-	push!(v, m[1, 2])
-	push!(v, m[1, 3])
-	push!(v, m[1, 4])
-	push!(v, m[2, 1])
-	push!(v, m[2, 2])
-	push!(v, m[2, 3])
-	push!(v, m[2, 4])
-	push!(v, m[3, 1])
-	push!(v, m[3, 2])
-	push!(v, m[3, 3])
-	push!(v, m[3, 4])
-	push!(v, m[4, 1])
-	push!(v, m[4, 2])
-	push!(v, m[4, 3])
-	push!(v, m[4, 4])
 
 	return v
 end

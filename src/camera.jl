@@ -102,9 +102,9 @@ end
 
 function RecalculateViewMatrix(camera::PerspectiveCamera)
 	trans = [
-		1 0 0 -camera.position[1]
-		0 1 0 -camera.position[2]
-		0 0 1 -camera.position[3]
+		1 0 0 -camera.position.x
+		0 1 0 -camera.position.y
+		0 0 1 -camera.position.z
 		0 0 0 1
 	]
 
