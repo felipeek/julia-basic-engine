@@ -175,7 +175,7 @@ function CoreMouseChangeProcess(ctx::CoreCtx, reset::Bool, xPos::Real, yPos::Rea
 
 		if ctx.isPanningCamera
 			yAxis = CameraGetYAxis(ctx.camera)
-			inc = -ctx.panningSpeed * LookAtCameraGetLookAtDistance(ctx.camera) * yDiff * yAxis
+			inc = ctx.panningSpeed * LookAtCameraGetLookAtDistance(ctx.camera) * yDiff * yAxis
 			LookAtCameraSetLookAtPosition(ctx.camera, LookAtCameraGetLookAtPosition(ctx.camera) + inc)
 
 			xAxis = CameraGetXAxis(ctx.camera)
