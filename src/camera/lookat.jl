@@ -87,8 +87,7 @@ end
 
 function CameraRotate(camera::LookAtCamera, angle::Real, axis::Vec3)
 	axis = QuaternionNew(axis, angle)
-	camera.rotation = axis * camera.rotation
-	QuaternionNormalize(camera.rotation)
+	camera.rotation = QuaternionNormalize(axis * camera.rotation)
 	RecalculateViewMatrix(camera)
 end
 
