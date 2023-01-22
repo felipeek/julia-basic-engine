@@ -94,7 +94,7 @@ end
 
 function CameraRotate(camera::LookAtCamera, xDiff::Real, yDiff::Real, mouseX::Real, mouseY::Real)
 	if camera.rotateRoll
-		CameraRotateXConsideringClickCoords(camera, xDiff, mouseY)
+		CameraRotateXConsideringClickCoords(camera, xDiff, -mouseY)
 		CameraRotateYConsideringClickCoords(camera, yDiff, -mouseX)
 	else
 		CameraRotateX(camera, xDiff)
