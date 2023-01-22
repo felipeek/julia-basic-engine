@@ -118,6 +118,11 @@ function CameraSetFov(camera::FreeCamera, fov::Real, windowWidth::Integer, windo
 	RecalculateProjectionMatrix(camera, windowWidth, windowHeight)
 end
 
+function CameraRotate(camera::FreeCamera, xDiff::Real, yDiff::Real, mouseX::Real, mouseY::Real)
+	CameraRotateX(camera, 0.2 * xDiff)
+	CameraRotateY(camera, 0.2 * yDiff)
+end
+
 function CameraForceMatrixRecalculation(camera::FreeCamera, windowWidth::Integer, windowHeight::Integer)
 	RecalculateViewMatrix(camera)
 	RecalculateProjectionMatrix(camera, windowWidth, windowHeight)

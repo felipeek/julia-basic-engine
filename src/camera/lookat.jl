@@ -9,6 +9,7 @@ mutable struct LookAtCamera <: Camera
 
 	lookAtPosition::Vec3
 	lookAtDistance::Real
+	rotateRoll::Bool
 end
 
 function CameraGetPosition(camera::LookAtCamera)::Vec3
@@ -68,26 +69,40 @@ end
 function CameraRotateXConsideringClickCoords(camera::LookAtCamera, xDifference::Real, mouseY::Real)
 	# If the user clicked on the top (or bottom) of the screen, we also consider the Z axis.
 	axis = mouseY * Vec3(0.0, 0.0, 1.0) + (1 - abs(mouseY)) * Vec3(0.0, 1.0, 0.0)
-	CameraRotate(camera, xDifference, axis)
+	CameraRotateAxis(camera, xDifference, axis)
 end
 
 function CameraRotateYConsideringClickCoords(camera::LookAtCamera, yDifference::Real, mouseX::Real)
 	# If the user clicked on the right (or left) of the screen, we also consider the Z axis.
 	axis = mouseX * Vec3(0.0, 0.0, 1.0) + (1 - abs(mouseX)) * Vec3(1.0, 0.0, 0.0)
-	CameraRotate(camera, yDifference, axis)
+	CameraRotateAxis(camera, yDifference, axis)
 end
 
 function CameraRotateX(camera::LookAtCamera, xDifference::Real)
-	CameraRotate(camera, xDifference, Vec3(0.0, 1.0, 0.0))
+	CameraRotateAxis(camera, xDifference, Vec3(0.0, 1.0, 0.0))
 end
 
 function CameraRotateY(camera::LookAtCamera, yDifference::Real)
-	CameraRotate(camera, yDifference, Vec3(1.0, 0.0, 0.0))
+	CameraRotateAxis(camera, yDifference, Vec3(1.0, 0.0, 0.0))
 end
 
-function CameraRotate(camera::LookAtCamera, angle::Real, axis::Vec3)
+function CameraRotateAxis(camera::LookAtCamera, angle::Real, axis::Vec3)
 	axis = QuaternionNew(axis, angle)
 	camera.rotation = QuaternionNormalize(axis * camera.rotation)
+	RecalculateViewMatrix(camera)
+end
+
+function CameraRotate(camera::LookAtCamera, xDiff::Real, yDiff::Real, mouseX::Real, mouseY::Real)
+	if camera.rotateRoll
+		CameraRotateXConsideringClickCoords(camera, xDiff, mouseY)
+		CameraRotateYConsideringClickCoords(camera, yDiff, -mouseX)
+	else
+		CameraRotateX(camera, xDiff)
+		CameraRotateY(camera, yDiff)
+	end
+
+	cameraView = CameraGetView(camera)
+	camera.position = camera.lookAtPosition - camera.lookAtDistance * cameraView
 	RecalculateViewMatrix(camera)
 end
 
@@ -164,11 +179,11 @@ end
 # Look At Camera specific functions
 
 function LookAtCamera(lookAtPosition::Vec3, lookAtDistance::Real, nearPlane::Real, farPlane::Real, fov::Real,
-		windowWidth::Integer, windowHeight::Integer)::LookAtCamera
+		windowWidth::Integer, windowHeight::Integer, rotateRoll::Bool)::LookAtCamera
 	cameraView = Vec3(0, 0, -1)
 	position = lookAtPosition - lookAtDistance * normalize(cameraView)
 	rotation = Quaternion(0, 0, 0, 1)
-	camera = LookAtCamera(position, nearPlane, farPlane, fov, zeros(4, 4), zeros(4, 4), rotation, lookAtPosition, lookAtDistance)
+	camera = LookAtCamera(position, nearPlane, farPlane, fov, zeros(4, 4), zeros(4, 4), rotation, lookAtPosition, lookAtDistance, rotateRoll)
 	RecalculateViewMatrix(camera)
 	RecalculateProjectionMatrix(camera, windowWidth, windowHeight)
 	return camera
@@ -180,22 +195,6 @@ end
 
 function LookAtCameraGetLookAtPosition(camera::LookAtCamera)
 	return camera.lookAtPosition
-end
-
-function LookAtCameraRotate(camera::LookAtCamera, xDifference::Real, yDifference::Real)
-	CameraRotateX(camera, xDifference)
-	CameraRotateY(camera, yDifference)
-	cameraView = CameraGetView(camera)
-	camera.position = camera.lookAtPosition - camera.lookAtDistance * cameraView
-	RecalculateViewMatrix(camera)
-end
-
-function LookAtCameraRotateConsideringClickCoords(camera::LookAtCamera, xDifference::Real, yDifference::Real, mouseX::Real, mouseY::Real)
-	CameraRotateXConsideringClickCoords(camera, xDifference, mouseY)
-	CameraRotateYConsideringClickCoords(camera, yDifference, mouseX)
-	cameraView = CameraGetView(camera)
-	camera.position = camera.lookAtPosition - camera.lookAtDistance * cameraView
-	RecalculateViewMatrix(camera)
 end
 
 function LookAtCameraSetLookAtPosition(camera::LookAtCamera, lookAtPosition::Vec3)

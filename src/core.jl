@@ -10,7 +10,7 @@ mutable struct CoreCtx
 	rotationSpeed::Real
 	zoomSpeed::Real
 	panningSpeed::Real
-	considerMouseClickCoordsWhenRotating::Bool
+	rotateRoll::Bool
 
 	lights::Vector{Light}
 	e::Entity
@@ -39,7 +39,7 @@ function CreateLookAtCamera(windowWidth::Integer, windowHeight::Integer)::LookAt
 	cameraNearPlane = -0.01
 	cameraFarPlane = -1000.0
 	cameraFov = 45.0
-	return LookAtCamera(lookAtPosition, lookAtDistance, cameraNearPlane, cameraFarPlane, cameraFov, windowWidth, windowHeight)
+	return LookAtCamera(lookAtPosition, lookAtDistance, cameraNearPlane, cameraFarPlane, cameraFov, windowWidth, windowHeight, true)
 end
 
 function CreateLights()::Vector{Light}
@@ -163,41 +163,24 @@ function CoreKeyPressProcess(ctx::CoreCtx, key::GLFW.Key, scanCode::Integer, act
 end
 
 function CoreMouseChangeProcess(ctx::CoreCtx, reset::Bool, xPos::Real, yPos::Real)
-	if !useFreeCamera
-		yPos = ctx.windowHeight - yPos
-	end
-
 	xDiff = xPos - ctx.mouseChangeXPosOld
 	yDiff = yPos - ctx.mouseChangeYPosOld
 
 	if !reset
-		if ctx.useFreeCamera
-			cameraMouseSpeed = 0.1
-			CameraRotateX(ctx.camera, cameraMouseSpeed * xDiff)
-			CameraRotateY(ctx.camera, cameraMouseSpeed * yDiff)
-		else
-			if ctx.isRotatingCamera
-				pitch = -ctx.rotationSpeed * xDiff
-				yaw = ctx.rotationSpeed * yDiff
+		mouseX, mouseY = WindowNormalizeCoordsToNdc(ctx.mouseChangeXPosOld, ctx.mouseChangeYPosOld,
+			ctx.windowWidth, ctx.windowHeight)
+		if ctx.useFreeCamera || ctx.isRotatingCamera
+			CameraRotate(ctx.camera, ctx.rotationSpeed * xDiff, ctx.rotationSpeed * yDiff, mouseX, mouseY)
+		end
 
-				if ctx.considerMouseClickCoordsWhenRotating
-					mouseX, mouseY = WindowNormalizeCoordsToNdc(ctx.mouseChangeXPosOld, ctx.mouseChangeYPosOld,
-						ctx.windowWidth, ctx.windowHeight)
-					LookAtCameraRotateConsideringClickCoords(ctx.camera, -pitch, -yaw, -mouseX, mouseY)
-				else
-					LookAtCameraRotate(ctx.camera, -pitch, -yaw)
-				end
-			end
+		if ctx.isPanningCamera
+			yAxis = CameraGetYAxis(ctx.camera)
+			inc = -ctx.panningSpeed * LookAtCameraGetLookAtDistance(ctx.camera) * yDiff * yAxis
+			LookAtCameraSetLookAtPosition(ctx.camera, LookAtCameraGetLookAtPosition(ctx.camera) + inc)
 
-			if ctx.isPanningCamera
-				yAxis = CameraGetYAxis(ctx.camera)
-				inc = -ctx.panningSpeed * LookAtCameraGetLookAtDistance(ctx.camera) * yDiff * yAxis
-				LookAtCameraSetLookAtPosition(ctx.camera, LookAtCameraGetLookAtPosition(ctx.camera) + inc)
-
-				xAxis = CameraGetXAxis(ctx.camera)
-				inc = -ctx.panningSpeed * LookAtCameraGetLookAtDistance(ctx.camera) * xDiff * xAxis
-				LookAtCameraSetLookAtPosition(ctx.camera, LookAtCameraGetLookAtPosition(ctx.camera) + inc)
-			end
+			xAxis = CameraGetXAxis(ctx.camera)
+			inc = -ctx.panningSpeed * LookAtCameraGetLookAtDistance(ctx.camera) * xDiff * xAxis
+			LookAtCameraSetLookAtPosition(ctx.camera, LookAtCameraGetLookAtPosition(ctx.camera) + inc)
 		end
 	end
 
