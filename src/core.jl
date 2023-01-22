@@ -170,15 +170,13 @@ function CoreMouseChangeProcess(ctx::CoreCtx, reset::Bool, xPos::Real, yPos::Rea
 	xDiff = xPos - ctx.mouseChangeXPosOld
 	yDiff = yPos - ctx.mouseChangeYPosOld
 
-	if ctx.useFreeCamera
-		if !reset
+	if !reset
+		if ctx.useFreeCamera
 			cameraMouseSpeed = 0.1
 			CameraRotateX(ctx.camera, cameraMouseSpeed * xDiff)
 			CameraRotateY(ctx.camera, cameraMouseSpeed * yDiff)
-		end
-	else
-		if ctx.isRotatingCamera
-			if !reset
+		else
+			if ctx.isRotatingCamera
 				pitch = -ctx.rotationSpeed * xDiff
 				yaw = ctx.rotationSpeed * yDiff
 
@@ -190,10 +188,8 @@ function CoreMouseChangeProcess(ctx::CoreCtx, reset::Bool, xPos::Real, yPos::Rea
 					LookAtCameraRotate(ctx.camera, -pitch, -yaw)
 				end
 			end
-		end
 
-		if ctx.isPanningCamera
-			if !reset
+			if ctx.isPanningCamera
 				yAxis = CameraGetYAxis(ctx.camera)
 				inc = -ctx.panningSpeed * LookAtCameraGetLookAtDistance(ctx.camera) * yDiff * yAxis
 				LookAtCameraSetLookAtPosition(ctx.camera, LookAtCameraGetLookAtPosition(ctx.camera) + inc)
