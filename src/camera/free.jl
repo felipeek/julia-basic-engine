@@ -81,10 +81,18 @@ function CameraRotateX(camera::FreeCamera, xDifference::Real)
 end
 
 function CameraRotateY(camera::FreeCamera, yDifference::Real)
-	right = QuaternionGetRightInverted(camera.rotation)
-	right = normalize(right)
-	xAxis = QuaternionNew(right, yDifference)
-	camera.rotation = camera.rotation * xAxis
+	local xAxis
+	if camera.lockRotation
+		right = QuaternionGetRightInverted(camera.rotation)
+		right = normalize(right)
+		xAxis = QuaternionNew(right, yDifference)
+		camera.rotation = xAxis * camera.rotation
+		QuaternionNormalize(camera.rotation)
+	else
+		xAxis = QuaternionNew(Vec3(1.0, 0.0, 0.0), yDifference)
+	end
+
+	camera.rotation = xAxis * camera.rotation
 	QuaternionNormalize(camera.rotation)
 	RecalculateViewMatrix(camera)
 end
