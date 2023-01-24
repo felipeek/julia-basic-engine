@@ -18,7 +18,7 @@ using DataStructures
 
 const defaultWindowWidth = 1366
 const defaultWindowHeight = 768
-const useFreeCamera = false
+const ImGuiCtx = Ptr{CImGui.ImGuiContext}
 
 include("vectors.jl")
 include("quaternion.jl")
@@ -32,50 +32,47 @@ include("util.jl")
 
 function Start()
 	function GlfwKeyCallback(window::GLFW.Window, key::GLFW.Key, scanCode::Integer, action::GLFW.Action, mods::Integer)
-		if !isMenuVisible
+		imGuiIO = CImGui.GetIO()
+		if !imGuiIO.WantCaptureKeyboard
 			CoreKeyPressProcess(coreCtx, key, scanCode, action, mods)
-		end
-
-		if key == GLFW.KEY_ESCAPE && action == GLFW.PRESS
-			if isMenuVisible && useFreeCamera
-				GLFW.SetInputMode(window, GLFW.CURSOR, GLFW.CURSOR_DISABLED)
-			else
-				GLFW.SetInputMode(window, GLFW.CURSOR, GLFW.CURSOR_NORMAL)
-			end
-
-			isMenuVisible = !isMenuVisible
 		end
 	end
 
 	function GlfwCursorCallback(window::GLFW.Window, xPos::Real, yPos::Real)
-		if !isMenuVisible
-			CoreMouseChangeProcess(coreCtx, resetCoreMouseMovement, xPos, yPos)
-			resetCoreMouseMovement = false
-		else
-			resetCoreMouseMovement = true
+		imGuiIO = CImGui.GetIO()
+		if !imGuiIO.WantCaptureMouse
+			CoreMouseChangeProcess(coreCtx, xPos, yPos)
 		end
 	end
 
 	function GlfwMouseButtonCallback(window::GLFW.Window, button::GLFW.MouseButton, action::GLFW.Action, mods::Integer)
-		xPos, yPos = GLFW.GetCursorPos(window)
-		
-		if !isMenuVisible
+		imGuiIO = CImGui.GetIO()
+		if !imGuiIO.WantCaptureMouse
+			xPos, yPos = GLFW.GetCursorPos(window)
 			CoreMouseClickProcess(coreCtx, button, action, xPos, yPos)
 		end
 	end
 
 	function GlfwScrollCallback(window::GLFW.Window, xOffset::Real, yOffset::Real)
-		if !isMenuVisible
+		imGuiIO = CImGui.GetIO()
+		if !imGuiIO.WantCaptureMouse
 			CoreScrollChangeProcess(coreCtx, xOffset, yOffset)
 		end
 	end
 
-	function GlfwResizeCallback(window::GLFW.Window, width::Integer, height::Integer)
-		ViewportBasedOnWindowSize(0, 0, width, height)
+	function GlfwWindowResizeCallback(window::GLFW.Window, width::Integer, height::Integer)
 		CoreWindowResizeProcess(coreCtx, width, height)
 	end
 
+	function GlfwFramebufferResizeCallback(window::GLFW.Window, width::Integer, height::Integer)
+		CoreFramebufferResizeProcess(coreCtx, width, height)
+	end
+
 	function GlfwCharCallback(window::GLFW.Window, c::Char)
+		imGuiIO = CImGui.GetIO()
+		if !imGuiIO.WantCaptureKeyboard
+			# no-op
+		end
 	end
 
 	function GlfwInit()::GLFW.Window
@@ -100,7 +97,8 @@ function Start()
 
 		GLFW.SetKeyCallback(window, GlfwKeyCallback)
 		GLFW.SetCursorPosCallback(window, GlfwCursorCallback)
-		GLFW.SetWindowSizeCallback(window, GlfwResizeCallback)
+		GLFW.SetWindowSizeCallback(window, GlfwWindowResizeCallback)
+		GLFW.SetFramebufferSizeCallback(window, GlfwFramebufferResizeCallback)
 		GLFW.SetInputMode(window, GLFW.CURSOR, GLFW.CURSOR_NORMAL)
 
 		CImGui.SetCustomKeyCallback(GlfwKeyCallback)
@@ -111,17 +109,37 @@ function Start()
 		return window
 	end
 
-	# Used in GLFW callbacks
-	isMenuVisible = true
-	resetCoreMouseMovement = true
+	function ImGuiInit(window::GLFW.Window)::ImGuiCtx
+		# setup Dear ImGui context
+		imGuiCtx = CImGui.CreateContext()
+
+		# setup Dear ImGui style
+		#CImGui.StyleColorsDark()
+		#CImGui.StyleColorsClassic()
+		CImGui.StyleColorsLight()
+
+		# setup Platform/Renderer bindings
+		ImGui_ImplGlfw_InitForOpenGL(window, true)
+		glslVersion = 330 # (need to match GLFW.CONTEXT_VERSION_MAJOR and GLFW.CONTEXT_VERSION_MINOR)
+		ImGui_ImplOpenGL3_Init(glslVersion)
+
+		return imGuiCtx
+	end
+	
+	function ImGuiDestroy(imGuiCtx::ImGuiCtx)
+		ImGui_ImplOpenGL3_Shutdown()
+		ImGui_ImplGlfw_Shutdown()
+		CImGui.DestroyContext(imGuiCtx)
+	end
 
 	deltaTime = 0.0
 	window = GlfwInit()
 
-	effectiveWindowWidth, effectiveWindowHeight = GLFW.GetWindowSize(window)
-	ViewportBasedOnWindowSize(0, 0, effectiveWindowWidth, effectiveWindowHeight)
+	windowWidth, windowHeight = GLFW.GetWindowSize(window)
+	framebufferWidth, framebufferHeight = GLFW.GetFramebufferSize(window)
 
-	coreCtx = CoreInit(defaultWindowWidth, defaultWindowHeight, useFreeCamera)
+	imGuiCtx = ImGuiInit(window)
+	coreCtx = CoreInit(windowWidth, windowHeight, framebufferWidth, framebufferHeight)
 
 	glEnable(GL_DEPTH_TEST)
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
@@ -130,20 +148,14 @@ function Start()
 	frameNumber = trunc(Int, lastFrame)
 	fps = 0
 
-	imGuiCtx = UiInit(window)
-
 	try
 		while !GLFW.WindowShouldClose(window)
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 			glClearColor(0.8, 0.8, 0.8, 1.0)
 
+			CoreInputProcess(coreCtx, deltaTime)
 			CoreUpdate(coreCtx, deltaTime)
 			CoreRender(coreCtx)
-			if !isMenuVisible
-				CoreInputProcess(coreCtx, deltaTime)
-			else
-				UiRender()
-			end
 
 			GLFW.PollEvents()
 			GLFW.SwapBuffers(window)
@@ -163,7 +175,8 @@ function Start()
 		@error "Error in renderloop!" exception=ex
 		Base.show_backtrace(stderr, catch_backtrace())
 	finally
-		UiDestroy(imGuiCtx)
+		CoreDestroy(coreCtx)
+		ImGuiDestroy(imGuiCtx)
 		GLFW.DestroyWindow(window)
 	end
 end

@@ -8,13 +8,16 @@ mutable struct FreeCamera <: Camera
 	rotation::Quaternion
 	yRotation::Quaternion
 	lockRotation::Bool
+	movementSpeed::Real
+	rotationSpeed::Real
 end
 
 function FreeCamera(position::Vec3, nearPlane::Real, farPlane::Real, fov::Real, windowWidth::Integer, windowHeight::Integer,
-		lockRotation::Bool = true)
+		lockRotation::Bool, movementSpeed::Real, rotationSpeed::Real)
 	rotation = Quaternion(0, 0, 0, 1)
 	yRotation = Quaternion(0, 0, 0, 1)
-	camera = FreeCamera(position, nearPlane, farPlane, fov, zeros(4, 4), zeros(4, 4), rotation, yRotation, lockRotation)
+	camera = FreeCamera(position, nearPlane, farPlane, fov, zeros(4, 4), zeros(4, 4), rotation, yRotation, lockRotation, movementSpeed,
+		rotationSpeed)
 	RecalculateViewMatrix(camera)
 	RecalculateProjectionMatrix(camera, windowWidth, windowHeight)
 	return camera
@@ -69,7 +72,7 @@ function CameraSetFarPlane(camera::FreeCamera, farPlane::Real, windowWidth::Inte
 end
 
 function CameraRotateX(camera::FreeCamera, xDifference::Real)
-	yAxis = QuaternionNew(Vec3(0.0, 1.0, 0.0), xDifference)
+	yAxis = QuaternionNew(Vec3(0.0, 1.0, 0.0), camera.rotationSpeed * xDifference)
 	if camera.lockRotation
 		camera.yRotation = QuaternionNormalize(yAxis * camera.yRotation)
 	else
@@ -83,10 +86,10 @@ function CameraRotateY(camera::FreeCamera, yDifference::Real)
 	if camera.lockRotation
 		right = QuaternionGetRightInverted(camera.rotation)
 		right = normalize(right)
-		xAxis = QuaternionNew(right, yDifference)
+		xAxis = QuaternionNew(right, camera.rotationSpeed * yDifference)
 		camera.rotation = QuaternionNormalize(xAxis * camera.rotation)
 	else
-		xAxis = QuaternionNew(Vec3(1.0, 0.0, 0.0), yDifference)
+		xAxis = QuaternionNew(Vec3(1.0, 0.0, 0.0), camera.rotationSpeed * yDifference)
 	end
 
 	camera.rotation = QuaternionNormalize(xAxis * camera.rotation)
@@ -97,7 +100,7 @@ function CameraMoveForward(camera::FreeCamera, amount::Real)
 	f = camera.lockRotation ? camera.rotation * camera.yRotation : camera.rotation
 
 	forward = QuaternionGetForwardInverted(f)
-	forward = amount * normalize(forward)
+	forward = camera.movementSpeed * amount * normalize(forward)
 	camera.position = Vec3(-forward.x, -forward.y, -forward.z) + camera.position
 
 	RecalculateViewMatrix(camera)
@@ -107,7 +110,7 @@ function CameraMoveRight(camera::FreeCamera, amount::Real)
 	f = camera.lockRotation ? camera.rotation * camera.yRotation : camera.rotation
 
 	right = QuaternionGetRightInverted(f)
-	right = amount * normalize(right)
+	right = camera.movementSpeed * amount * normalize(right)
 	camera.position = Vec3(right.x, right.y, right.z) + camera.position
 
 	RecalculateViewMatrix(camera)
@@ -119,8 +122,8 @@ function CameraSetFov(camera::FreeCamera, fov::Real, windowWidth::Integer, windo
 end
 
 function CameraRotate(camera::FreeCamera, xDiff::Real, yDiff::Real, mouseX::Real, mouseY::Real)
-	CameraRotateX(camera, 0.2 * xDiff)
-	CameraRotateY(camera, 0.2 * yDiff)
+	CameraRotateX(camera, xDiff)
+	CameraRotateY(camera, yDiff)
 end
 
 function CameraForceMatrixRecalculation(camera::FreeCamera, windowWidth::Integer, windowHeight::Integer)

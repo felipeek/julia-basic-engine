@@ -1,23 +1,14 @@
-const MENU_TITLE = "Menu (Press ESC to Show/Hide menu, W/A/S/D to move)"
+const MENU_TITLE = "Menu (Press ESC to Show/Hide menu)"
 
-function UiInit(window::GLFW.Window)
-	# setup Dear ImGui context
-	ctx = CImGui.CreateContext()
+mutable struct UiCtx
+end
 
-	# setup Dear ImGui style
-	CImGui.StyleColorsDark()
-	# CImGui.StyleColorsClassic()
-	# CImGui.StyleColorsLight()
-
-	# setup Platform/Renderer bindings
-	ImGui_ImplGlfw_InitForOpenGL(window, true)
-	glslVersion = 330 # (need to match GLFW.CONTEXT_VERSION_MAJOR and GLFW.CONTEXT_VERSION_MINOR)
-	ImGui_ImplOpenGL3_Init(glslVersion)
-
+function UiInit()
+	ctx = UiCtx()
 	return ctx
 end
 
-function DrawMainWindow()
+function DrawMainWindow(ctx::UiCtx)
 	if !CImGui.Begin(MENU_TITLE)
 		# Early out if the window is collapsed, as an optimization.
 		CImGui.End()
@@ -31,7 +22,7 @@ function DrawMainWindow()
 	CImGui.End()
 end
 
-function UiRender()
+function UiRender(ctx::UiCtx, isUiActive::Bool)
 	# Start the Dear ImGui frame
 	ImGui_ImplOpenGL3_NewFrame()
 	ImGui_ImplGlfw_NewFrame()
@@ -40,16 +31,14 @@ function UiRender()
 	CImGui.SetNextWindowPos(CImGui.ImVec2(650, 20), CImGui.ImGuiCond_FirstUseEver)
 	CImGui.SetNextWindowSize(CImGui.ImVec2(550, 680), CImGui.ImGuiCond_FirstUseEver)
 
-	DrawMainWindow()
+	if isUiActive
+		DrawMainWindow(ctx)
+	end
 
 	# Rendering
 	CImGui.Render()
 	ImGui_ImplOpenGL3_RenderDrawData(CImGui.GetDrawData())
 end
 
-function UiDestroy(ctx)
-	# Cleanup
-	ImGui_ImplOpenGL3_Shutdown()
-	ImGui_ImplGlfw_Shutdown()
-	CImGui.DestroyContext(ctx)
+function UiDestroy(ctx::UiCtx)
 end

@@ -1,5 +1,11 @@
 mutable struct CoreCtx
 	graphicsCtx::GraphicsCtx
+	uiCtx::UiCtx
+	isUiActive::Bool
+
+	lights::Vector{Light}
+	e::Entity
+	wireframe::Bool
 
 	# Camera-related atrtibutes
 	camera::Camera
@@ -7,22 +13,15 @@ mutable struct CoreCtx
 	isRotatingCamera::Bool
 	isPanningCamera::Bool
 	alternativePanningMethod::Bool # if true, pan via shift instead of mouse3
-	rotationSpeed::Real
-	zoomSpeed::Real
-	panningSpeed::Real
-	rotateRoll::Bool
-
-	lights::Vector{Light}
-	e::Entity
-	wireframe::Bool
 	mouseChangeXPosOld::Real
 	mouseChangeYPosOld::Real
 
+	# Window/Input State
 	windowWidth::Integer
 	windowHeight::Integer
+	framebufferWidth::Integer
+	framebufferHeight::Integer
 	keyState::AbstractDict{GLFW.Key, Bool}
-	shiftState::Bool
-	ctrlState::Bool
 end
 
 function CreateFreeCamera(windowWidth::Integer, windowHeight::Integer)::FreeCamera
@@ -30,7 +29,10 @@ function CreateFreeCamera(windowWidth::Integer, windowHeight::Integer)::FreeCame
 	cameraNearPlane = -0.01
 	cameraFarPlane = -1000.0
 	cameraFov = 45.0
-	return FreeCamera(cameraPosition, cameraNearPlane, cameraFarPlane, cameraFov, windowWidth, windowHeight)
+	movementSpeed = 3.0
+	rotationSpeed = 0.05
+	return FreeCamera(cameraPosition, cameraNearPlane, cameraFarPlane, cameraFov, windowWidth, windowHeight, true, movementSpeed,
+		rotationSpeed)
 end
 
 function CreateLookAtCamera(windowWidth::Integer, windowHeight::Integer)::LookAtCamera
@@ -39,7 +41,11 @@ function CreateLookAtCamera(windowWidth::Integer, windowHeight::Integer)::LookAt
 	cameraNearPlane = -0.01
 	cameraFarPlane = -1000.0
 	cameraFov = 45.0
-	return LookAtCamera(lookAtPosition, lookAtDistance, cameraNearPlane, cameraFarPlane, cameraFov, windowWidth, windowHeight, true)
+	zoomSpeed = 0.2
+	rotationSpeed = 0.1
+	panningSpeed = 0.001
+	return LookAtCamera(lookAtPosition, lookAtDistance, cameraNearPlane, cameraFarPlane, cameraFov, windowWidth, windowHeight, true,
+		zoomSpeed, rotationSpeed, panningSpeed)
 end
 
 function CreateLights()::Vector{Light}
@@ -68,20 +74,24 @@ function CreateEntity()::Entity
 		Vec4(113 / 255, 199 / 255, 236 / 255, 1))
 end
 
-function CoreInit(windowWidth::Integer, windowHeight::Integer, useFreeCamera::Bool)::CoreCtx
+function CoreInit(windowWidth::Integer, windowHeight::Integer, framebufferWidth::Integer, framebufferHeight::Integer)::CoreCtx
+	glViewport(0, 0, framebufferWidth, framebufferHeight)
 	graphicsCtx = GraphicsInit()
+	uiCtx = UiInit()
 
+	useFreeCamera = false
 	camera = useFreeCamera ? CreateFreeCamera(windowWidth, windowHeight) : CreateLookAtCamera(windowWidth, windowHeight)
 	lights = CreateLights()
 	e = CreateEntity()
 	wireframe = false
 	keyState = DefaultDict{GLFW.Key, Bool}(false)
 
-	return CoreCtx(graphicsCtx, camera, useFreeCamera, false, false, false,  0.2, 0.1, 0.001, true, lights, e, wireframe, 0, 0,
-		windowWidth, windowHeight, keyState, false, false)
+	return CoreCtx(graphicsCtx, uiCtx, false, lights, e, wireframe, camera, useFreeCamera, false, false, false, 0, 0,
+		windowWidth, windowHeight, framebufferWidth, framebufferHeight, keyState)
 end
 
 function CoreDestroy(ctx::CoreCtx)
+	UiDestroy(ctx.uiCtx)
 end
 
 function CoreUpdate(ctx::CoreCtx, deltaTime::Real)
@@ -89,30 +99,31 @@ end
 
 function CoreRender(ctx::CoreCtx)
 	GraphicsEntityRenderPhongShader(ctx.graphicsCtx, ctx.camera, ctx.e, ctx.lights)
+	UiRender(ctx.uiCtx, ctx.isUiActive)
 end
 
 function CoreInputProcess(ctx::CoreCtx, deltaTime::Real)
-	movementSpeed = 3.0
+	cameraMovementMultiplier = 1.0
 
 	if ctx.keyState[GLFW.KEY_LEFT_SHIFT]
-		movementSpeed = 0.5
+		cameraMovementMultiplier = 0.5
 	end
 	if ctx.keyState[GLFW.KEY_RIGHT_SHIFT]
-		movementSpeed = 0.1
+		cameraMovementMultiplier = 0.1
 	end
 
 	if ctx.useFreeCamera
 		if ctx.keyState[GLFW.KEY_W]
-			CameraMoveForward(ctx.camera, movementSpeed * deltaTime)
+			CameraMoveForward(ctx.camera, cameraMovementMultiplier * deltaTime)
 		end
 		if ctx.keyState[GLFW.KEY_S]
-			CameraMoveForward(ctx.camera, -movementSpeed * deltaTime)
+			CameraMoveForward(ctx.camera, -cameraMovementMultiplier * deltaTime)
 		end
 		if ctx.keyState[GLFW.KEY_A]
-			CameraMoveRight(ctx.camera, -movementSpeed * deltaTime)
+			CameraMoveRight(ctx.camera, -cameraMovementMultiplier * deltaTime)
 		end
 		if ctx.keyState[GLFW.KEY_D]
-			CameraMoveRight(ctx.camera, movementSpeed * deltaTime)
+			CameraMoveRight(ctx.camera, cameraMovementMultiplier * deltaTime)
 		end
 	end
 
@@ -127,61 +138,50 @@ function CoreInputProcess(ctx::CoreCtx, deltaTime::Real)
 		ctx.keyState[GLFW.KEY_L] = false
 	end
 
+	if ctx.keyState[GLFW.KEY_KP_DECIMAL]
+		if !ctx.useFreeCamera
+			LookAtCameraSetLookAtPosition(ctx.camera, Vec3(0, 0, 0))
+			ctx.keyState[GLFW.KEY_KP_DECIMAL] = false
+		end
+	end
+
 	if ctx.alternativePanningMethod
-		if !ctx.shiftState
+		if !ctx.keyState[GLFW.KEY_LEFT_SHIFT] && !ctx.keyState[GLFW.KEY_RIGHT_SHIFT]
 			ctx.isPanningCamera = false
 		else
 			ctx.isPanningCamera = true
 		end
+	end
+
+	if ctx.keyState[GLFW.KEY_ESCAPE]
+		ctx.isUiActive = !ctx.isUiActive
+		ctx.keyState[GLFW.KEY_ESCAPE] = false
 	end
 end
 
 function CoreKeyPressProcess(ctx::CoreCtx, key::GLFW.Key, scanCode::Integer, action::GLFW.Action, mods::Integer)
 	if action == GLFW.PRESS
 		ctx.keyState[key] = true
-
-		if key == GLFW.KEY_LEFT_SHIFT || key == GLFW.KEY_RIGHT_SHIFT
-			ctx.shiftState = true
-		end
-
-		if key == GLFW.KEY_LEFT_CONTROL || key == GLFW.KEY_RIGHT_CONTROL
-			ctx.ctrlState = true
-		end
 	end
 
 	if action == GLFW.RELEASE
 		ctx.keyState[key] = false
-
-		if key == GLFW.KEY_LEFT_SHIFT || key == GLFW.KEY_RIGHT_SHIFT
-			ctx.shiftState = false
-		end
-
-		if key == GLFW.KEY_LEFT_CONTROL || key == GLFW.KEY_RIGHT_CONTROL
-			ctx.ctrlState = false
-		end
 	end
 end
 
-function CoreMouseChangeProcess(ctx::CoreCtx, reset::Bool, xPos::Real, yPos::Real)
+function CoreMouseChangeProcess(ctx::CoreCtx, xPos::Real, yPos::Real)
 	xDiff = xPos - ctx.mouseChangeXPosOld
 	yDiff = yPos - ctx.mouseChangeYPosOld
 
-	if !reset
-		mouseX, mouseY = WindowNormalizeCoordsToNdc(ctx.mouseChangeXPosOld, ctx.mouseChangeYPosOld,
-			ctx.windowWidth, ctx.windowHeight)
-		if ctx.useFreeCamera || ctx.isRotatingCamera
-			CameraRotate(ctx.camera, ctx.rotationSpeed * xDiff, ctx.rotationSpeed * yDiff, mouseX, mouseY)
-		end
+	mouseX, mouseY = WindowNormalizeCoordsToNdc(ctx.mouseChangeXPosOld, ctx.mouseChangeYPosOld,
+		ctx.windowWidth, ctx.windowHeight)
 
-		if ctx.isPanningCamera
-			yAxis = CameraGetYAxis(ctx.camera)
-			inc = ctx.panningSpeed * LookAtCameraGetLookAtDistance(ctx.camera) * yDiff * yAxis
-			LookAtCameraSetLookAtPosition(ctx.camera, LookAtCameraGetLookAtPosition(ctx.camera) + inc)
+	if ctx.isRotatingCamera
+		CameraRotate(ctx.camera, xDiff, yDiff, mouseX, mouseY)
+	end
 
-			xAxis = CameraGetXAxis(ctx.camera)
-			inc = -ctx.panningSpeed * LookAtCameraGetLookAtDistance(ctx.camera) * xDiff * xAxis
-			LookAtCameraSetLookAtPosition(ctx.camera, LookAtCameraGetLookAtPosition(ctx.camera) + inc)
-		end
+	if ctx.isPanningCamera
+		LookAtCameraPan(ctx.camera, xDiff, yDiff)
 	end
 
 	ctx.mouseChangeXPosOld = xPos
@@ -191,16 +191,18 @@ end
 function CoreMouseClickProcess(ctx::CoreCtx, button::GLFW.MouseButton, action::GLFW.Action, xPos::Real, yPos::Real)
 	yPos = ctx.windowHeight - yPos
 
-	if !ctx.useFreeCamera
-		if button == GLFW.MOUSE_BUTTON_2 # right click
-			if action == GLFW.PRESS
-				ctx.isRotatingCamera = true
-			end
+	if button == GLFW.MOUSE_BUTTON_2
+		if action == GLFW.PRESS
+			ctx.isRotatingCamera = true
+		end
 
-			if action == GLFW.RELEASE
-				ctx.isRotatingCamera = false
-			end
-		elseif button == GLFW.MOUSE_BUTTON_3
+		if action == GLFW.RELEASE
+			ctx.isRotatingCamera = false
+		end
+	end
+
+	if !ctx.useFreeCamera
+		if button == GLFW.MOUSE_BUTTON_3
 			if !ctx.alternativePanningMethod
 				if action == GLFW.PRESS
 					ctx.isPanningCamera = true
@@ -216,8 +218,7 @@ end
 
 function CoreScrollChangeProcess(ctx::CoreCtx, xOffset::Real, yOffset::Real)
 	if !ctx.useFreeCamera
-		currentLookAtDistance = LookAtCameraGetLookAtDistance(ctx.camera)
-		LookAtCameraSetLookAtDistance(ctx.camera, currentLookAtDistance - yOffset * ctx.zoomSpeed)
+		LookAtCameraApproximate(ctx.camera, yOffset)
 	end
 end
 
@@ -225,4 +226,10 @@ function CoreWindowResizeProcess(ctx::CoreCtx, windowWidth::Integer, windowHeigh
 	ctx.windowWidth = windowWidth
 	ctx.windowHeight = windowHeight
 	CameraForceMatrixRecalculation(ctx.camera, windowWidth, windowHeight)
+end
+
+function CoreFramebufferResizeProcess(ctx::CoreCtx, framebufferWidth::Integer, framebufferHeight::Integer)
+	ctx.framebufferWidth = framebufferWidth
+	ctx.framebufferHeight = framebufferHeight
+	glViewport(0, 0, ctx.framebufferWidth, ctx.framebufferHeight)
 end

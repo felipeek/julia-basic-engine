@@ -10,6 +10,22 @@ mutable struct LookAtCamera <: Camera
 	lookAtPosition::Vec3
 	lookAtDistance::Real
 	rotateRoll::Bool
+
+	zoomSpeed::Real
+	rotationSpeed::Real
+	panningSpeed::Real
+end
+
+function LookAtCamera(lookAtPosition::Vec3, lookAtDistance::Real, nearPlane::Real, farPlane::Real, fov::Real, windowWidth::Integer,
+		windowHeight::Integer, rotateRoll::Bool, zoomSpeed::Real, rotationSpeed::Real, panningSpeed::Real)::LookAtCamera
+	cameraView = Vec3(0, 0, -1)
+	position = lookAtPosition - lookAtDistance * normalize(cameraView)
+	rotation = Quaternion(0, 0, 0, 1)
+	camera = LookAtCamera(position, nearPlane, farPlane, fov, zeros(4, 4), zeros(4, 4), rotation, lookAtPosition, lookAtDistance, rotateRoll,
+		zoomSpeed, rotationSpeed, panningSpeed)
+	RecalculateViewMatrix(camera)
+	RecalculateProjectionMatrix(camera, windowWidth, windowHeight)
+	return camera
 end
 
 function CameraGetPosition(camera::LookAtCamera)::Vec3
@@ -87,7 +103,7 @@ function CameraRotateY(camera::LookAtCamera, yDifference::Real)
 end
 
 function CameraRotateAxis(camera::LookAtCamera, angle::Real, axis::Vec3)
-	axis = QuaternionNew(axis, angle)
+	axis = QuaternionNew(axis, angle * camera.rotationSpeed)
 	camera.rotation = QuaternionNormalize(axis * camera.rotation)
 	RecalculateViewMatrix(camera)
 end
@@ -178,17 +194,6 @@ end
 
 # Look At Camera specific functions
 
-function LookAtCamera(lookAtPosition::Vec3, lookAtDistance::Real, nearPlane::Real, farPlane::Real, fov::Real,
-		windowWidth::Integer, windowHeight::Integer, rotateRoll::Bool)::LookAtCamera
-	cameraView = Vec3(0, 0, -1)
-	position = lookAtPosition - lookAtDistance * normalize(cameraView)
-	rotation = Quaternion(0, 0, 0, 1)
-	camera = LookAtCamera(position, nearPlane, farPlane, fov, zeros(4, 4), zeros(4, 4), rotation, lookAtPosition, lookAtDistance, rotateRoll)
-	RecalculateViewMatrix(camera)
-	RecalculateProjectionMatrix(camera, windowWidth, windowHeight)
-	return camera
-end
-
 function LookAtCameraGetLookAtDistance(camera::LookAtCamera)
 	return camera.lookAtDistance
 end
@@ -210,4 +215,18 @@ function LookAtCameraSetLookAtDistance(camera::LookAtCamera, lookAtDistance::Rea
 	cameraView = CameraGetView(camera)
 	camera.position = camera.lookAtPosition - camera.lookAtDistance * cameraView
 	RecalculateViewMatrix(camera)
+end
+
+function LookAtCameraPan(camera::LookAtCamera, xDiff::Real, yDiff::Real)
+	yAxis = CameraGetYAxis(camera)
+	inc = camera.panningSpeed * camera.lookAtDistance * yDiff * yAxis
+	LookAtCameraSetLookAtPosition(camera, camera.lookAtPosition + inc)
+
+	xAxis = CameraGetXAxis(camera)
+	inc = -camera.panningSpeed * camera.lookAtDistance * xDiff * xAxis
+	LookAtCameraSetLookAtPosition(camera, camera.lookAtPosition + inc)
+end
+
+function LookAtCameraApproximate(camera::LookAtCamera, yOffset::Real)
+	LookAtCameraSetLookAtDistance(camera, camera.lookAtDistance - yOffset * camera.zoomSpeed)
 end
